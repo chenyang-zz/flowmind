@@ -5,6 +5,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 /**
@@ -14,13 +17,8 @@ func TestNewEventBus(t *testing.T) {
 	bus := NewEventBus()
 	defer bus.Stop(5 * time.Second)
 
-	if bus == nil {
-		t.Fatal("Expected non-nil bus")
-	}
-
-	if bus.stopped.Load() {
-		t.Fatal("Expected bus to be running")
-	}
+	assert.NotNil(t, bus, "Expected non-nil bus")
+	assert.False(t, bus.stopped.Load(), "Expected bus to be running")
 }
 
 /**
@@ -41,22 +39,18 @@ func TestSubscribe(t *testing.T) {
 	}
 
 	subscriberID := bus.Subscribe("test", handler)
-	if subscriberID == "" {
-		t.Fatal("Expected non-empty subscriber ID")
-	}
+	assert.NotEmpty(t, subscriberID, "Expected non-empty subscriber ID")
 
 	// 发布事件
 	event := NewEvent("test", map[string]interface{}{"message": "hello"})
-	bus.Publish("test", *event)
+	err := bus.Publish("test", *event)
+	require.NoError(t, err, "Failed to publish event")
 
 	// 等待异步处理
 	time.Sleep(100 * time.Millisecond)
 
 	mutex.Lock()
-	if !received {
-		mutex.Unlock()
-		t.Fatal("Expected to receive event")
-	}
+	assert.True(t, received, "Expected to receive event")
 	mutex.Unlock()
 }
 
@@ -88,16 +82,15 @@ func TestSubscribeWildcard(t *testing.T) {
 	}
 
 	for _, event := range events {
-		bus.Publish(string(event.Type), event)
+		err := bus.Publish(string(event.Type), event)
+		require.NoError(t, err, "Failed to publish event")
 	}
 
 	// 等待异步处理
 	time.Sleep(100 * time.Millisecond)
 
 	mutex.Lock()
-	if count != 3 {
-		t.Fatalf("Expected 3 events, got %d", count)
-	}
+	assert.Equal(t, 3, count, "Expected 3 events")
 	mutex.Unlock()
 }
 
@@ -129,18 +122,22 @@ func TestSubscribeWithFilter(t *testing.T) {
 	bus.SubscribeWithFilter("test", handler, filter)
 
 	// 发布多个事件
-	bus.Publish("test", *NewEvent("test", map[string]interface{}{"value": 3}))
-	bus.Publish("test", *NewEvent("test", map[string]interface{}{"value": 7}))
-	bus.Publish("test", *NewEvent("test", map[string]interface{}{"value": 10}))
+	events := []Event{
+		*NewEvent("test", map[string]interface{}{"value": 3}),
+		*NewEvent("test", map[string]interface{}{"value": 7}),
+		*NewEvent("test", map[string]interface{}{"value": 10}),
+	}
+
+	for _, event := range events {
+		err := bus.Publish("test", event)
+		require.NoError(t, err, "Failed to publish event")
+	}
 
 	// 等待异步处理
 	time.Sleep(100 * time.Millisecond)
 
 	mutex.Lock()
-	if received != 2 {
-		mutex.Unlock()
-		t.Fatalf("Expected 2 events (value > 5), got %d", received)
-	}
+	assert.Equal(t, 2, received, "Expected 2 events (value > 5)")
 	mutex.Unlock()
 }
 
@@ -165,17 +162,16 @@ func TestSubscribeOnce(t *testing.T) {
 
 	// 发布多个事件
 	for i := 0; i < 3; i++ {
-		bus.Publish("test", *NewEvent("test", map[string]interface{}{"count": i}))
+		event := *NewEvent("test", map[string]interface{}{"count": i})
+		err := bus.Publish("test", event)
+		require.NoError(t, err, "Failed to publish event")
 	}
 
 	// 等待异步处理
 	time.Sleep(100 * time.Millisecond)
 
 	mutex.Lock()
-	if count != 1 {
-		mutex.Unlock()
-		t.Fatalf("Expected 1 event (once subscription), got %d", count)
-	}
+	assert.Equal(t, 1, count, "Expected 1 event (once subscription)")
 	mutex.Unlock()
 }
 
@@ -199,7 +195,8 @@ func TestUnsubscribe(t *testing.T) {
 	subscriberID := bus.Subscribe("test", handler)
 
 	// 发布第一个事件
-	bus.Publish("test", *NewEvent("test", map[string]interface{}{"count": 1}))
+	err := bus.Publish("test", *NewEvent("test", map[string]interface{}{"count": 1}))
+	require.NoError(t, err, "Failed to publish first event")
 
 	// 等待处理
 	time.Sleep(50 * time.Millisecond)
@@ -208,16 +205,14 @@ func TestUnsubscribe(t *testing.T) {
 	bus.Unsubscribe(subscriberID)
 
 	// 发布第二个事件
-	bus.Publish("test", *NewEvent("test", map[string]interface{}{"count": 2}))
+	err = bus.Publish("test", *NewEvent("test", map[string]interface{}{"count": 2}))
+	require.NoError(t, err, "Failed to publish second event")
 
 	// 等待异步处理
 	time.Sleep(100 * time.Millisecond)
 
 	mutex.Lock()
-	if received != 1 {
-		mutex.Unlock()
-		t.Fatalf("Expected 1 event (after unsubscribe), got %d", received)
-	}
+	assert.Equal(t, 1, received, "Expected 1 event (after unsubscribe)")
 	mutex.Unlock()
 }
 
@@ -237,13 +232,10 @@ func TestEventContext(t *testing.T) {
 
 	event.WithContext(context)
 
-	if event.Context == nil {
-		t.Fatal("Expected context to be set")
-	}
-
-	if event.Context.Application != "VS Code" {
-		t.Errorf("Expected application 'VS Code', got '%s'", event.Context.Application)
-	}
+	assert.NotNil(t, event.Context, "Expected context to be set")
+	assert.Equal(t, "VS Code", event.Context.Application, "Expected application 'VS Code'")
+	assert.Equal(t, "com.microsoft.VSCode", event.Context.BundleID, "Expected bundle ID")
+	assert.Equal(t, "main.go - FlowMind", event.Context.WindowTitle, "Expected window title")
 }
 
 /**
@@ -255,13 +247,9 @@ func TestEventMetadata(t *testing.T) {
 	event.WithMetadata("source", "keyboard_monitor")
 	event.WithMetadata("version", "1.0")
 
-	if len(event.Metadata) != 2 {
-		t.Fatalf("Expected 2 metadata entries, got %d", len(event.Metadata))
-	}
-
-	if event.Metadata["source"] != "keyboard_monitor" {
-		t.Errorf("Expected metadata 'source' to be 'keyboard_monitor'")
-	}
+	assert.Equal(t, 2, len(event.Metadata), "Expected 2 metadata entries")
+	assert.Equal(t, "keyboard_monitor", event.Metadata["source"], "Expected metadata 'source' to be 'keyboard_monitor'")
+	assert.Equal(t, "1.0", event.Metadata["version"], "Expected metadata 'version' to be '1.0'")
 }
 
 /**
@@ -282,12 +270,16 @@ func TestRecoveryMiddleware(t *testing.T) {
 	// 发布事件（不应该导致程序崩溃）
 	err := bus.Publish("test", *NewEvent("test", map[string]interface{}{}))
 
+	// 可能有错误，但不应该 panic
 	if err != nil {
 		t.Logf("Expected error from recovered panic: %v", err)
 	}
 
 	// 等待异步处理
 	time.Sleep(100 * time.Millisecond)
+
+	// 如果到这里没有 panic，说明中间件工作正常
+	assert.True(t, true, "Middleware recovered from panic")
 }
 
 /**
@@ -314,20 +306,14 @@ func TestPublishAsync(t *testing.T) {
 
 	// 立即检查（应该还没收到）
 	mutex.Lock()
-	if received {
-		mutex.Unlock()
-		t.Fatal("Event should not be received immediately (async)")
-	}
+	assert.False(t, received, "Event should not be received immediately (async)")
 	mutex.Unlock()
 
 	// 等待后应该收到
 	time.Sleep(100 * time.Millisecond)
 
 	mutex.Lock()
-	if !received {
-		mutex.Unlock()
-		t.Fatal("Expected to receive event after waiting")
-	}
+	assert.True(t, received, "Expected to receive event after waiting")
 	mutex.Unlock()
 }
 
@@ -337,29 +323,23 @@ func TestPublishAsync(t *testing.T) {
 func TestStop(t *testing.T) {
 	bus := NewEventBus()
 
-	// 启动一些订阅者，但不用长时间睡眠
+	// 启动一些订阅者
 	for i := 0; i < 5; i++ {
 		bus.Subscribe("test", func(event Event) error {
-			// 不睡眠，立即返回
 			return nil
 		})
 	}
 
-	// 停止总线（增加超时时间）
+	// 停止总线
 	err := bus.Stop(10 * time.Second)
-	if err != nil {
-		t.Fatalf("Failed to stop bus: %v", err)
-	}
+	require.NoError(t, err, "Failed to stop bus")
 
-	if !bus.stopped.Load() {
-		t.Fatal("Expected bus to be stopped")
-	}
+	assert.True(t, bus.stopped.Load(), "Expected bus to be stopped")
 
 	// 尝试发布事件（应该失败）
 	err = bus.Publish("test", *NewEvent("test", map[string]interface{}{}))
-	if err == nil {
-		t.Fatal("Expected error when publishing to stopped bus")
-	}
+	assert.Error(t, err, "Expected error when publishing to stopped bus")
+	assert.Contains(t, err.Error(), "stopped", "Error should mention bus is stopped")
 }
 
 /**
@@ -390,7 +370,8 @@ func TestConcurrentPublish(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			event := *NewEvent("test", map[string]interface{}{"id": id})
-			bus.Publish("test", event)
+			err := bus.Publish("test", event)
+			assert.NoError(t, err, "Failed to publish event %d", id)
 		}(i)
 	}
 
@@ -400,9 +381,7 @@ func TestConcurrentPublish(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	mutex.Lock()
-	if count != numEvents {
-		t.Fatalf("Expected %d events, got %d", numEvents, count)
-	}
+	assert.Equal(t, numEvents, count, "Expected %d events", numEvents)
 	mutex.Unlock()
 }
 
@@ -415,8 +394,12 @@ func TestRateLimitMiddleware(t *testing.T) {
 	defer bus.Stop(5 * time.Second)
 
 	received := 0
+	var mutex sync.Mutex
+
 	handler := func(event Event) error {
+		mutex.Lock()
 		received++
+		mutex.Unlock()
 		return nil
 	}
 
@@ -424,18 +407,23 @@ func TestRateLimitMiddleware(t *testing.T) {
 
 	// 快速发布 20 个事件
 	for i := 0; i < 20; i++ {
-		bus.Publish("test", *NewEvent("test", map[string]interface{}{"id": i}))
+		err := bus.Publish("test", *NewEvent("test", map[string]interface{}{"id": i}))
+		assert.NoError(t, err, "Failed to publish event %d", i)
 	}
 
 	// 等待处理
 	time.Sleep(200 * time.Millisecond)
 
 	// 应该只有部分事件被处理（受速率限制）
+	mutex.Lock()
 	if received > 15 {
 		t.Logf("WARNING: Rate limiting may not be working (received %d events)", received)
 	}
-
 	fmt.Printf("Rate limit test: received %d out of 20 events\n", received)
+	mutex.Unlock()
+
+	// 至少应该有一些事件被处理
+	assert.Greater(t, received, 0, "Expected at least some events to be processed")
 }
 
 /**
@@ -453,7 +441,10 @@ func BenchmarkEventBusPublish(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		bus.Publish("test", event)
+		err := bus.Publish("test", event)
+		if err != nil {
+			b.Fatalf("Failed to publish: %v", err)
+		}
 	}
 }
 
