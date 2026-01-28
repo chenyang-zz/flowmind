@@ -1,0 +1,174 @@
+# FlowMind 默认配置
+
+application:
+  name: "FlowMind"
+  version: "1.0.0"
+  log_level: "info"
+  debug: false
+
+# 监控配置
+monitor:
+  # 启用的监控器
+  enabled_monitors:
+    - keyboard
+    - clipboard
+    - application
+    # - filesystem  # 可选
+
+  # 采样率
+  sample_rate: "100ms"
+
+  # 事件缓冲区大小
+  event_buffer_size: 1000
+
+  # 过滤器配置
+  filters:
+    # 忽略的应用
+    ignore_apps:
+      - "com.apple.ScreenSaver"
+      - "com.apple.systemuiserver"
+
+    # 忽略的窗口标题
+    ignore_window_titles:
+      - "Screen Saver"
+
+# AI 配置
+ai:
+  # 提供商: claude 或 ollama
+  provider: "claude"
+
+  # Claude API 配置
+  claude:
+    api_key: "${CLAUDE_API_KEY}"  # 从环境变量读取
+    model: "claude-3-5-sonnet-20241022"
+    max_tokens: 4096
+    temperature: 0.7
+
+  # Ollama 配置
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "llama3.2"
+
+  # 缓存配置
+  cache:
+    enabled: true
+    ttl: "1h"
+    max_size: 1000
+
+  # 提示词模板目录
+  templates_dir: "./internal/ai/templates"
+
+# 自动化配置
+automation:
+  # 最大执行时间
+  max_execution_time: "5m"
+
+  # 允许的路径
+  allowed_paths:
+    - "/tmp"
+    - "${HOME}/Documents"
+    - "${HOME}/Desktop"
+    - "${HOME}/Downloads"
+
+  # 沙箱配置
+  sandbox:
+    enabled: true
+    max_memory: "512MB"
+    max_cpu_time: "30s"
+    allow_network: false
+
+  # 定时任务配置
+  scheduler:
+    enabled: true
+    max_concurrent: 5
+
+# 知识管理配置
+knowledge:
+  # 剪藏配置
+  clipper:
+    auto_tag: true
+    auto_summarize: true
+    max_clip_size: "10MB"
+
+  # 向量搜索配置
+  search:
+    top_k: 10
+    similarity_threshold: 0.7
+
+  # 知识图谱配置
+  graph:
+    enabled: true
+    max_nodes: 10000
+    auto_link: true
+
+# 存储配置
+storage:
+  # SQLite 配置
+  sqlite:
+    path: "${HOME}/.flowmind/flowmind.db"
+    max_open_conns: 25
+    max_idle_conns: 5
+    conn_max_lifetime: "5m"
+
+  # BBolt 配置
+  bolt:
+    path: "${HOME}/.flowmind/cache.db"
+    bucket: "flowmind"
+
+  # 向量数据库配置
+  vector:
+    path: "${HOME}/.flowmind/vectors"
+    embedding_dim: 768
+    index_type: "hnsw"
+
+  # 数据保留策略
+  retention:
+    events_days: 30
+    patterns_days: 365
+    knowledge_forever: true
+
+# 通知配置
+notifications:
+  # 桌面通知
+  desktop:
+    enabled: true
+    sound: true
+
+  # Webhook 配置
+  webhooks:
+    - url: "${WEBHOOK_URL:}"
+      enabled: false
+
+  # 去重配置
+  dedup:
+    enabled: true
+    ttl: "5m"
+
+# 日志配置
+logging:
+  level: "info"  # debug, info, warn, error
+  format: "json"  # json, text
+  output: "stdout"  # stdout, file
+
+  # 文件输出配置
+  file:
+    path: "${HOME}/.flowmind/logs/flowmind.log"
+    max_size: "100MB"
+    max_backups: 3
+    max_age: "30d"
+    compress: true
+
+# macOS 权限说明
+macos:
+  permissions:
+    accessibility:
+      description: "FlowMind 需要辅助功能权限来监听你的操作"
+      required: true
+
+    full_disk_access:
+      description: "FlowMind 需要完全磁盘访问权限来读取文件"
+      required: false
+
+    notifications:
+      description: "FlowMind 需要通知权限来发送提醒"
+      required: true

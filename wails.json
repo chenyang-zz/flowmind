@@ -1,0 +1,23 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "FlowMind",
+  "outputfilename": "flowmind",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm run build",
+  "frontend:dev:watcher": "pnpm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "SheepZhao",
+    "email": "your@email.com"
+  },
+  "info": {
+    "companyName": "FlowMind",
+    "productName": "FlowMind",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright 2025",
+    "comments": "AI Workflow Intelligence"
+  },
+  "wailsjsdir": "./frontend",
+  "version": "2",
+  "outputType": "desktop"
+}
