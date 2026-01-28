@@ -12,8 +12,12 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/chenyang-zz/flowmind/internal/infrastructure/config"
+	"github.com/chenyang-zz/flowmind/internal/monitor"
+	"github.com/chenyang-zz/flowmind/pkg/events"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 /**
@@ -30,6 +34,14 @@ type App struct {
 	// config 是应用配置
 	// 包含所有可配置的应用参数
 	config *config.Config
+
+	// eventBus 是事件总线
+	// 用于应用内部的事件传递
+	eventBus *events.EventBus
+
+	// monitorEngine 是监控引擎
+	// 负责键盘、剪贴板、应用切换等监控
+	monitorEngine monitor.Monitor
 
 	// ========== 依赖注入的服务 ==========
 	//
@@ -68,7 +80,16 @@ type App struct {
  *   - *App: 初始化好的 App 实例
  */
 func New() *App {
-	return &App{}
+	// 初始化事件总线
+	eventBus := events.NewEventBus()
+
+	// 初始化监控引擎
+	monitorEngine := monitor.NewEngine(eventBus)
+
+	return &App{
+		eventBus:      eventBus,
+		monitorEngine: monitorEngine,
+	}
 }
 
 /**
@@ -93,14 +114,13 @@ func (a *App) Startup(ctx context.Context) error {
 	// TODO: 加载配置
 	// a.config = config.Load()
 
-	// TODO: 初始化服务（使用 Wire 依赖注入）
-	// services := wire.InitializeApp(a.config)
+	// 启动监控引擎
+	if err := a.monitorEngine.Start(); err != nil {
+		return fmt.Errorf("failed to start monitor engine: %w", err)
+	}
 
-	// TODO: 启动后台监控
-	// go a.monitorSvc.Start(ctx)
-
-	// TODO: 启动事件转发（将后端事件推送到前端）
-	// go a.forwardEvents()
+	// 启动事件转发（将后端事件推送到前端）
+	go a.forwardEvents()
 
 	return nil
 }
@@ -114,8 +134,10 @@ func (a *App) Startup(ctx context.Context) error {
  * 3. 释放资源
  */
 func (a *App) Shutdown() {
-	// TODO: 停止监控服务
-	// a.monitorSvc.Stop()
+	// 停止监控引擎
+	if a.monitorEngine != nil {
+		_ = a.monitorEngine.Stop()
+	}
 
 	// TODO: 保存应用状态
 	// a.saveState()
@@ -215,13 +237,16 @@ func (a *App) GetEvents(limit int) ([]map[string]interface{}, error) {
  * 这样前端可以实时接收后端的状态更新
  */
 func (a *App) forwardEvents() {
-	// TODO: 实现事件转发
-	// eventChan := a.eventBus.Subscribe("*")
-	//
-	// for event := range eventChan {
-	//     // 将事件推送到前端
-	//     runtime.EventsEmit(a.ctx, event.Type, event.Data)
-	// }
+	// 订阅所有事件
+	subscriberID := a.eventBus.Subscribe("*", func(event events.Event) error {
+		// 将事件推送到前端
+		runtime.EventsEmit(a.ctx, string(event.Type), event)
+		return nil
+	})
+
+	// 保持订阅活跃
+	<-a.ctx.Done()
+	a.eventBus.Unsubscribe(subscriberID)
 }
 
 /**
