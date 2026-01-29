@@ -14,7 +14,7 @@ import (
 // 同时负责发布监控引擎的状态变更事件到事件总线。
 type Engine struct {
 	// keyboard 键盘监控器实例
-	keyboard *KeyboardMonitor
+	keyboard Monitor
 
 	// eventBus 事件总线，用于发布和订阅事件
 	eventBus *events.EventBus
@@ -122,7 +122,7 @@ func (e *Engine) IsRunning() bool {
 // 返回引擎管理的键盘监控器实例，可用于直接访问键盘监控器。
 // 注意：返回的实例可能为 nil（在引擎未启动时）。
 //
-// Returns: *KeyboardMonitor - 键盘监控器实例，可能为 nil
-func (e *Engine) GetKeyboardMonitor() *KeyboardMonitor {
+// Returns: Monitor - 键盘监控器实例，可能为 nil
+func (e *Engine) GetKeyboardMonitor() Monitor {
 	return e.keyboard
 }

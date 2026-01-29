@@ -497,3 +497,54 @@ func TestKeyboardMonitor_WithNilEventBus(t *testing.T) {
 	// 这里只验证不会 panic 创建
 	_ = monitor
 }
+
+// TestKeyboardMonitor_GetHotkeyManager 测试获取快捷键管理器
+//
+// 验证 KeyboardMonitor 正确集成了 HotkeyManager。
+// 测试场景：
+//   1. 获取快捷键管理器，验证不为 nil
+//   2. 验证快捷键管理器功能正常
+func TestKeyboardMonitor_GetHotkeyManager(t *testing.T) {
+	eventBus := events.NewEventBus()
+	monitor := NewKeyboardMonitor(eventBus)
+
+	// 类型断言获取实际的 KeyboardMonitor 类型
+	km, ok := monitor.(*KeyboardMonitor)
+	require.True(t, ok, "monitor 应该是 *KeyboardMonitor 类型")
+
+	// 获取快捷键管理器
+	hotkeyMgr := km.GetHotkeyManager()
+	assert.NotNil(t, hotkeyMgr, "快捷键管理器不应为 nil")
+
+	// 验证快捷键管理器功能
+	testHotkey := "Cmd+A"
+	registered := hotkeyMgr.IsRegistered(testHotkey)
+	assert.False(t, registered, "快捷键尚未注册")
+
+	// 注册快捷键
+	id, err := hotkeyMgr.Register(testHotkey, func(reg *HotkeyRegistration, ctx *events.EventContext) {})
+	require.NoError(t, err, "注册快捷键不应失败")
+	assert.NotEmpty(t, id, "注册 ID 不应为空")
+
+	// 验证注册成功
+	registered = hotkeyMgr.IsRegistered(testHotkey)
+	assert.True(t, registered, "快捷键应该已注册")
+
+	// 启动监控器
+	err = monitor.Start()
+	if err != nil {
+		t.Skipf("需要辅助功能权限，跳过测试: %v", err)
+	}
+	require.NoError(t, err)
+
+	// 验证快捷键管理器也已启动
+	assert.True(t, hotkeyMgr.IsRunning(), "快捷键管理器应该已启动")
+
+	// 停止监控器
+	err = monitor.Stop()
+	require.NoError(t, err)
+
+	// 验证快捷键管理器也已停止
+	assert.False(t, hotkeyMgr.IsRunning(), "快捷键管理器应该已停止")
+}
+

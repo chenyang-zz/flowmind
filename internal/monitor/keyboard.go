@@ -29,6 +29,9 @@ type KeyboardMonitor struct {
 	// contextMgr 上下文管理器，用于获取当前应用信息
 	contextMgr platform.ContextProvider
 
+	// hotkeyManager 快捷键管理器，用于快捷键注册和匹配
+	hotkeyManager *HotkeyManager
+
 	// isRunning 监控器运行状态标志
 	isRunning bool
 
@@ -38,17 +41,18 @@ type KeyboardMonitor struct {
 
 // NewKeyboardMonitor 创建键盘监控器
 //
-// 创建一个新的键盘监控器实例，并初始化其依赖的平台层组件和上下文管理器。
+// 创建一个新的键盘监控器实例，并初始化其依赖的平台层组件、上下文管理器和快捷键管理器。
 //
 // Parameters:
 //   - eventBus: 事件总线实例，用于发布键盘事件
 //
-// Returns: *KeyboardMonitor - 新创建的键盘监控器实例
-func NewKeyboardMonitor(eventBus *events.EventBus) *KeyboardMonitor {
+// Returns: Monitor - 新创建的键盘监控器实例（返回接口类型）
+func NewKeyboardMonitor(eventBus *events.EventBus) Monitor {
 	return &KeyboardMonitor{
-		platform:   platform.NewKeyboardMonitor(),
-		eventBus:   eventBus,
-		contextMgr: platform.NewContextProvider(),
+		platform:      platform.NewKeyboardMonitor(),
+		eventBus:      eventBus,
+		contextMgr:    platform.NewContextProvider(),
+		hotkeyManager: NewHotkeyManager(eventBus),
 	}
 }
 
@@ -71,6 +75,14 @@ func (km *KeyboardMonitor) Start() error {
 		return err
 	}
 
+	// 启动快捷键管理器
+	if km.hotkeyManager != nil {
+		if err := km.hotkeyManager.Start(); err != nil {
+			// 快捷键管理器启动失败，不影响主监控器
+			// 可以记录日志或发布错误事件
+		}
+	}
+
 	km.isRunning = true
 	return nil
 }
@@ -87,6 +99,11 @@ func (km *KeyboardMonitor) Stop() error {
 
 	if !km.isRunning {
 		return nil // 未运行
+	}
+
+	// 停止快捷键管理器
+	if km.hotkeyManager != nil {
+		_ = km.hotkeyManager.Stop()
 	}
 
 	if err := km.platform.Stop(); err != nil {
@@ -106,6 +123,17 @@ func (km *KeyboardMonitor) IsRunning() bool {
 	km.mu.RLock()
 	defer km.mu.RUnlock()
 	return km.isRunning
+}
+
+// GetHotkeyManager 获取快捷键管理器
+//
+// 返回键盘监控器管理的快捷键管理器实例，可用于注册和取消注册快捷键。
+//
+// Returns: *HotkeyManager - 快捷键管理器实例，可能为 nil（在监控器未初始化时）
+func (km *KeyboardMonitor) GetHotkeyManager() *HotkeyManager {
+	km.mu.RLock()
+	defer km.mu.RUnlock()
+	return km.hotkeyManager
 }
 
 // handlePlatformEvent 处理平台层传来的原始键盘事件
