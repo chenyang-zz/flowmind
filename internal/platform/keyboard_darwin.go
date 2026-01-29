@@ -90,12 +90,34 @@ static void destroyEventTap(void* tap) {
         CFRelease(eventTap);
     }
 }
+
+// runRunLoopInMode 在当前线程运行 CFRunLoop（带超时）
+// 此函数会运行 CFRunLoop 一小段时间（0.1 秒），然后返回
+// 通过反复调用此函数，可以在每次循环之间检查停止信号
+// Returns: true 表示 RunLoop 处理了事件，false 表示超时
+static int runRunLoopInMode() {
+    // 运行 RunLoop 0.1 秒
+    CFRunLoopRunResult result = CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.1, false);
+    return (result == kCFRunLoopRunHandledSource);
+}
+
+// checkRunLoopSource 检查 RunLoop 是否有待处理的事件源
+// Returns: true 表示有待处理的事件，false 表示空闲
+static int checkRunLoopSource() {
+    CFRunLoopRef currentLoop = CFRunLoopGetCurrent();
+    CFRunLoopSourceRef src = NULL;
+    return (currentLoop != NULL && CFRunLoopContainsSource(currentLoop, src, kCFRunLoopDefaultMode));
+}
 */
 import "C"
 import (
 	"fmt"
 	"sync"
+	"time"
 	"unsafe"
+
+	"github.com/chenyang-zz/flowmind/pkg/logger"
+	"go.uber.org/zap"
 )
 
 // DarwinKeyboardMonitor macOS 平台的键盘监控器实现
@@ -113,6 +135,8 @@ type DarwinKeyboardMonitor struct {
 	mu sync.RWMutex
 	// stopChan 停止信号通道
 	stopChan chan struct{}
+	// runLoopDone CFRunLoop 退出信号通道，用于等待 RunLoop 线程结束
+	runLoopDone chan struct{}
 }
 
 // 全局键盘监控器实例（用于 C 回调）
@@ -130,16 +154,18 @@ var (
 // Returns: KeyboardMonitor 接口的 macOS 实现
 func NewKeyboardMonitor() KeyboardMonitor {
 	return &DarwinKeyboardMonitor{
-		stopChan: make(chan struct{}),
+		stopChan:    make(chan struct{}),
+		runLoopDone: make(chan struct{}),
 	}
 }
 
-//export goKeyboardCallback
 // goKeyboardCallback C 到 Go 的桥接函数
 //
 // 这是一个导出函数，由 C 层的 CGEventTap 回调调用。
 // 它将键盘事件异步转发给当前活跃的监控器实例处理。
 // Parameters: keyCode - 按键代码, flags - 修饰键标志
+//
+//export goKeyboardCallback
 func goKeyboardCallback(keyCode, flags C.int) {
 	monitorMutex.Lock()
 	if defaultKeyboardMonitor != nil {
@@ -172,7 +198,7 @@ func (km *DarwinKeyboardMonitor) handleCallback(keyCode int, flags uint64) {
 
 // Start 启动键盘监控
 //
-// 创建 CGEventTap 并开始捕获键盘事件。
+// 创建 CGEventTap 并在独立的 goroutine 中运行 CFRunLoop 以捕获键盘事件。
 // 如果创建失败（通常是因为缺少辅助功能权限），返回错误。
 // Parameters: callback - 键盘事件回调函数
 // Returns: error - 启动失败时返回错误
@@ -203,8 +229,35 @@ func (km *DarwinKeyboardMonitor) Start(callback KeyboardCallback) error {
 		return fmt.Errorf("failed to create event tap: please grant accessibility permission")
 	}
 
-	// 重新创建停止通道（支持多次启停）
+	// 重新创建停止通道和 RunLoop 完成通道（支持多次启停）
 	km.stopChan = make(chan struct{})
+	km.runLoopDone = make(chan struct{})
+
+	// 在独立的 goroutine 中运行 CFRunLoop
+	// CFRunLoop 是 macOS 的事件循环机制，负责处理系统事件
+	// 使用 CFRunLoopRunInMode 而不是 CFRunLoopRun，以便定期检查停止信号
+	go func() {
+		logger.Info("CFRunLoop 监控线程启动", zap.String("component", "keyboard"))
+
+		// 使用 runtime.LockOSThread 确保 goroutine 绑定到 OS 线程
+		// 这对于 CFRunLoop 的正确运行很重要
+
+		for {
+			// 运行 f 一小段时间（0.1 秒）
+			// 这允许 RunLoop 处理事件，同时我们可以定期检查停止信号
+			C.runRunLoopInMode()
+
+			// 检查是否收到停止信号
+			select {
+			case <-km.stopChan:
+				logger.Info("收到停止信号，退出 CFRunLoop", zap.String("component", "keyboard"))
+				close(km.runLoopDone)
+				return
+			default:
+				// 继续运行
+			}
+		}
+	}()
 
 	km.isRunning = true
 
@@ -213,7 +266,7 @@ func (km *DarwinKeyboardMonitor) Start(callback KeyboardCallback) error {
 
 // Stop 停止键盘监控
 //
-// 销毁 CGEventTap 并释放相关资源。
+// 发送停止信号给 CFRunLoop，销毁 CGEventTap 并释放相关资源。
 // Returns: error - 停止失败时返回错误
 func (km *DarwinKeyboardMonitor) Stop() error {
 	km.mu.Lock()
@@ -221,6 +274,25 @@ func (km *DarwinKeyboardMonitor) Stop() error {
 
 	if !km.isRunning {
 		return fmt.Errorf("keyboard monitor not running")
+	}
+
+	logger.Info("停止键盘监控", zap.String("component", "keyboard"))
+
+	// 发送停止信号（关闭 stopChan 会触发 select case）
+	// CFRunLoop 线程会在下一个循环检查到此信号并退出
+	select {
+	case <-km.stopChan:
+		// 通道已关闭（不应该发生，因为我们在 Start 时创建新通道）
+	default:
+		close(km.stopChan)
+	}
+
+	// 等待 CFRunLoop 线程退出（最多等待 2 秒）
+	select {
+	case <-km.runLoopDone:
+		logger.Info("CFRunLoop 线程已正常退出", zap.String("component", "keyboard"))
+	case <-time.After(2 * time.Second):
+		logger.Warn("等待 CFRunLoop 线程退出超时", zap.String("component", "keyboard"))
 	}
 
 	// 销毁事件 tap（调用 C 函数）
@@ -235,14 +307,6 @@ func (km *DarwinKeyboardMonitor) Stop() error {
 	monitorMutex.Unlock()
 
 	km.isRunning = false
-
-	// 安全地关闭停止通道（避免重复关闭）
-	select {
-	case <-km.stopChan:
-		// 通道已关闭
-	default:
-		close(km.stopChan)
-	}
 
 	return nil
 }
