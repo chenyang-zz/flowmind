@@ -95,3 +95,33 @@ function functionName(param1: Type1): ReturnType {}
 - 保持注释与代码同步
 
 **记住：没有注释 = 没有完成！**
+
+## 📊 日志规范
+
+**在必要的地方使用 logger 打印日志**
+
+### 使用方式
+```go
+import "flowmind/pkg/logger"
+
+// 直接使用便利函数
+logger.Info("创建订单成功", zap.String("orderId", orderId))
+logger.Error("数据库连接失败", zap.Error(err))
+
+// 或使用 With 创建带预设字段的 logger
+log := logger.With(zap.String("userId", userId))
+log.Info("执行操作", zap.String("action", "login"))
+```
+
+### 必须记录日志的场景
+1. ✅ 所有错误处理 (`if err != nil`)
+2. ✅ 关键业务流程（开始、结束、状态变更）
+3. ✅ 外部调用（HTTP、数据库、第三方服务）
+4. ✅ 性能监控（耗时操作）
+
+### 日志级别
+- `Debug`: 调试信息（开发环境）
+- `Info`: 重要业务流程
+- `Warn`: 潜在问题、降级处理
+- `Error`: 错误异常
+- `Fatal`: 致命错误，程序退出
