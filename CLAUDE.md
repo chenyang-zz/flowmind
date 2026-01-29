@@ -35,6 +35,13 @@ import (
 - **assert**: 非关键条件验证
 - **require**: 关键条件验证
 
+### 覆盖率要求
+- **核心业务逻辑**: ≥90%
+- **工具函数**: ≥75%
+- **总体覆盖率**: ≥80%
+
+查看覆盖率：`go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out`
+
 ### 测试函数注释
 ```go
 // TestFunctionName 测试函数功能的简要说明
