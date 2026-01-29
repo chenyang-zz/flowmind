@@ -8,10 +8,12 @@ package logger
 
 import (
 	"os"
+	"strconv"
 	"sync"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
@@ -117,7 +119,14 @@ func initDevelopmentLogger() (*zap.Logger, error) {
 //   - JSON 格式（机器可解析）
 //   - Info 级别（避免过多日志）
 //   - 时间戳、调用者信息、堆栈跟踪
-//   - 可选的文件输出
+//   - 可选的文件输出（支持日志滚动）
+//
+// 日志滚动配置（通过环境变量）：
+//   - LOG_FILE: 日志文件路径
+//   - LOG_MAX_SIZE: 单个日志文件最大大小（MB），默认 100
+//   - LOG_MAX_BACKUPS: 保留的旧日志文件最大数量，默认 3
+//   - LOG_MAX_AGE: 保留旧日志文件的最大天数，默认 7
+//   - LOG_COMPRESS: 是否压缩旧日志文件（true/false），默认 true
 //
 // Returns:
 //   - *zap.Logger: 配置好的 logger
@@ -140,15 +149,25 @@ func initProductionLogger() (*zap.Logger, error) {
 	// 检查是否需要输出到文件
 	logFile := getEnv("LOG_FILE", "")
 	if logFile != "" {
-		// 如果指定了日志文件，同时输出到控制台和文件
-		file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return nil, err
+		// 使用 lumberjack 实现日志滚动
+		maxSize := getEnvInt("LOG_MAX_SIZE", 100)           // MB
+		maxBackups := getEnvInt("LOG_MAX_BACKUPS", 3)       // 保留文件数
+		maxAge := getEnvInt("LOG_MAX_AGE", 7)               // 天数
+		compress := getEnvBool("LOG_COMPRESS", true)        // 是否压缩
+
+		// 创建滚动日志 writer
+		rotateWriter := &lumberjack.Logger{
+			Filename:   logFile,
+			MaxSize:    maxSize,
+			MaxBackups: maxBackups,
+			MaxAge:     maxAge,
+			Compress:   compress,
 		}
 
+		// 创建日志核心
 		core := zapcore.NewCore(
 			zapcore.NewJSONEncoder(config.EncoderConfig),
-			zapcore.AddSync(file),
+			zapcore.AddSync(rotateWriter),
 			config.Level,
 		)
 
@@ -276,4 +295,50 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// getEnvInt 获取整数类型的环境变量
+//
+// 从系统环境变量中读取整数配置，如果不存在或解析失败则返回默认值。
+// Parameters:
+//   - key: 环境变量名
+//   - defaultValue: 默认值
+//
+// Returns: int - 环境变量整数值或默认值
+func getEnvInt(key string, defaultValue int) int {
+	valueStr := os.Getenv(key)
+	if valueStr == "" {
+		return defaultValue
+	}
+
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return defaultValue
+	}
+
+	return value
+}
+
+// getEnvBool 获取布尔类型的环境变量
+//
+// 从系统环境变量中读取布尔配置，支持 "true", "1", "yes" 为真值。
+// Parameters:
+//   - key: 环境变量名
+//   - defaultValue: 默认值
+//
+// Returns: bool - 环境变量布尔值或默认值
+func getEnvBool(key string, defaultValue bool) bool {
+	valueStr := os.Getenv(key)
+	if valueStr == "" {
+		return defaultValue
+	}
+
+	switch valueStr {
+	case "true", "1", "yes", "True", "TRUE", "Yes", "YES":
+		return true
+	case "false", "0", "no", "False", "FALSE", "No", "NO":
+		return false
+	default:
+		return defaultValue
+	}
 }
