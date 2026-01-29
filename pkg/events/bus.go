@@ -17,6 +17,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/chenyang-zz/flowmind/pkg/logger"
+	"go.uber.org/zap"
 )
 
 /**
@@ -190,6 +193,11 @@ func (bus *EventBus) SubscribeWithFilter(
 
 	bus.subscribers[eventType] = append(bus.subscribers[eventType], subscriber)
 
+	logger.Debug("订阅事件",
+		zap.String("event_type", eventType),
+		zap.String("subscriber_id", subscriber.ID),
+	)
+
 	// 启动异步处理
 	if bus.asyncEnabled {
 		bus.wg.Add(1)
@@ -250,6 +258,11 @@ func (bus *EventBus) Unsubscribe(subscriberID string) {
 				// 从列表中移除
 				bus.subscribers[eventType] = append(subscribers[:i], subscribers[i+1:]...)
 
+				logger.Debug("取消订阅",
+					zap.String("event_type", eventType),
+					zap.String("subscriber_id", subscriberID),
+				)
+
 				// 关闭通道（加锁保护）
 				sub.mu.Lock()
 				close(sub.Chan)
@@ -259,6 +272,8 @@ func (bus *EventBus) Unsubscribe(subscriberID string) {
 			}
 		}
 	}
+
+	logger.Debug("订阅者不存在，无法取消订阅", zap.String("subscriber_id", subscriberID))
 }
 
 /**
@@ -275,8 +290,16 @@ func (bus *EventBus) Unsubscribe(subscriberID string) {
  */
 func (bus *EventBus) Publish(eventType string, event Event) error {
 	if bus.stopped.Load() {
+		logger.Warn("事件总线已停止，无法发布事件",
+			zap.String("event_type", eventType),
+		)
 		return fmt.Errorf("event bus is stopped")
 	}
+
+	logger.Debug("发布事件",
+		zap.String("event_type", eventType),
+		zap.String("event_id", event.ID),
+	)
 
 	// 应用中间件
 	handler := bus.applyMiddleware(func(e Event) error {
@@ -291,11 +314,14 @@ func (bus *EventBus) Publish(eventType string, event Event) error {
 	subscribers := bus.getSubscribers(eventType)
 	bus.mutex.RUnlock()
 
+	subscriberCount := 0
 	// 发送事件到所有订阅者
 	for _, subscriber := range subscribers {
 		if subscriber.Filter != nil && !subscriber.Filter(event) {
 			continue // 过滤掉不匹配的事件
 		}
+
+		subscriberCount++
 
 		// 异步发送（加锁保护）
 		subscriber.mu.RLock()
@@ -303,10 +329,18 @@ func (bus *EventBus) Publish(eventType string, event Event) error {
 		case subscriber.Chan <- event:
 		default:
 			// 缓冲区满，丢弃事件
-			fmt.Printf("WARNING: Event dropped for subscriber %s, channel full\n", subscriber.ID)
+			logger.Warn("事件缓冲区满，丢弃事件",
+				zap.String("subscriber_id", subscriber.ID),
+				zap.String("event_type", eventType),
+			)
 		}
 		subscriber.mu.RUnlock()
 	}
+
+	logger.Debug("事件已发送",
+		zap.String("event_type", eventType),
+		zap.Int("subscriber_count", subscriberCount),
+	)
 
 	return nil
 }
@@ -387,18 +421,29 @@ func (bus *EventBus) Stop(timeout time.Duration) error {
 func (bus *EventBus) processSubscriber(subscriber *Subscriber) {
 	defer bus.wg.Done()
 
+	logger.Debug("订阅者处理器启动",
+		zap.String("subscriber_id", subscriber.ID),
+	)
+
 	for {
 		select {
 		case event, ok := <-subscriber.Chan:
 			if !ok {
 				// 通道关闭
+				logger.Debug("订阅者通道关闭",
+					zap.String("subscriber_id", subscriber.ID),
+				)
 				return
 			}
 
 			// 处理事件
 			handler := bus.applyMiddleware(subscriber.Handler)
 			if err := handler(event); err != nil {
-				fmt.Printf("ERROR: Event handler error: %v\n", err)
+				logger.Error("事件处理错误",
+					zap.String("subscriber_id", subscriber.ID),
+					zap.String("event_type", string(event.Type)),
+					zap.Error(err),
+				)
 			}
 
 			// 如果是一次性订阅，处理后取消
@@ -409,6 +454,9 @@ func (bus *EventBus) processSubscriber(subscriber *Subscriber) {
 
 		case <-bus.stopChan:
 			// 总线停止，退出
+			logger.Debug("订阅者处理器停止",
+				zap.String("subscriber_id", subscriber.ID),
+			)
 			return
 		}
 	}

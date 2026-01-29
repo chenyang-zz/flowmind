@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"github.com/chenyang-zz/flowmind/pkg/events"
+	"github.com/chenyang-zz/flowmind/pkg/logger"
+	"go.uber.org/zap"
 )
 
 // Modifiers 修饰键标志位常量（macOS CGEventFlags）
@@ -339,6 +341,10 @@ func (hm *HotkeyManager) Register(hotkeyStr string, callback HotkeyCallback) (st
 	// 解析快捷键
 	hotkey, err := NewHotkey(hotkeyStr)
 	if err != nil {
+		logger.Warn("解析快捷键失败",
+			zap.String("hotkey", hotkeyStr),
+			zap.Error(err),
+		)
 		return "", err
 	}
 
@@ -363,6 +369,11 @@ func (hm *HotkeyManager) Register(hotkeyStr string, callback HotkeyCallback) (st
 	// 添加到快速查找索引
 	lookupKey := hm.buildLookupKey(hotkey.KeyCode, hotkey.Modifiers)
 	hm.keyCodeMap[lookupKey] = append(hm.keyCodeMap[lookupKey], reg)
+
+	logger.Info("注册快捷键",
+		zap.String("hotkey", hotkeyStr),
+		zap.String("id", reg.ID),
+	)
 
 	return reg.ID, nil
 }
@@ -411,10 +422,19 @@ func (hm *HotkeyManager) Unregister(registrationID string) bool {
 					}
 				}
 
+				logger.Info("取消注册快捷键",
+					zap.String("id", registrationID),
+					zap.String("hotkey", normalizedKey),
+				)
+
 				return true
 			}
 		}
 	}
+
+	logger.Debug("快捷键注册不存在",
+		zap.String("id", registrationID),
+	)
 
 	return false
 }
@@ -602,11 +622,20 @@ func (hm *HotkeyManager) handleKeyboardEvent(event events.Event) error {
 			continue // 跳过禁用的快捷键
 		}
 
+		logger.Info("快捷键被触发",
+			zap.String("hotkey", reg.Hotkey.String()),
+			zap.String("id", reg.ID),
+		)
+
 		// 在独立的 goroutine 中执行回调，避免阻塞
 		go func(r *HotkeyRegistration) {
 			defer func() {
-				if r := recover(); r != nil {
+				if rec := recover(); rec != nil {
 					// 捕获回调中的 panic，防止崩溃
+					logger.Error("快捷键回调 panic",
+						zap.String("id", r.ID),
+						zap.Any("panic", rec),
+					)
 				}
 			}()
 			r.Callback(r, event.Context)

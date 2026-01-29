@@ -5,6 +5,8 @@ import (
 
 	"github.com/chenyang-zz/flowmind/internal/platform"
 	"github.com/chenyang-zz/flowmind/pkg/events"
+	"github.com/chenyang-zz/flowmind/pkg/logger"
+	"go.uber.org/zap"
 )
 
 // KeyboardMonitor 键盘监控器（业务层）
@@ -67,11 +69,18 @@ func (km *KeyboardMonitor) Start() error {
 	defer km.mu.Unlock()
 
 	if km.isRunning {
+		logger.Debug("键盘监控器已在运行", zap.String("component", "keyboard"))
 		return nil // 已经在运行
 	}
 
+	logger.Info("启动键盘监控器", zap.String("component", "keyboard"))
+
 	// 启动平台层监控器，并传入回调函数
 	if err := km.platform.Start(km.handlePlatformEvent); err != nil {
+		logger.Error("启动平台层键盘监控器失败",
+			zap.String("component", "keyboard"),
+			zap.Error(err),
+		)
 		return err
 	}
 
@@ -79,11 +88,15 @@ func (km *KeyboardMonitor) Start() error {
 	if km.hotkeyManager != nil {
 		if err := km.hotkeyManager.Start(); err != nil {
 			// 快捷键管理器启动失败，不影响主监控器
-			// 可以记录日志或发布错误事件
+			logger.Warn("快捷键管理器启动失败，但不影响键盘监控",
+				zap.String("component", "keyboard"),
+				zap.Error(err),
+			)
 		}
 	}
 
 	km.isRunning = true
+	logger.Info("键盘监控器启动成功", zap.String("component", "keyboard"))
 	return nil
 }
 
@@ -98,8 +111,11 @@ func (km *KeyboardMonitor) Stop() error {
 	defer km.mu.Unlock()
 
 	if !km.isRunning {
+		logger.Debug("键盘监控器未运行", zap.String("component", "keyboard"))
 		return nil // 未运行
 	}
+
+	logger.Info("停止键盘监控器", zap.String("component", "keyboard"))
 
 	// 停止快捷键管理器
 	if km.hotkeyManager != nil {
@@ -107,10 +123,15 @@ func (km *KeyboardMonitor) Stop() error {
 	}
 
 	if err := km.platform.Stop(); err != nil {
+		logger.Error("停止平台层键盘监控器失败",
+			zap.String("component", "keyboard"),
+			zap.Error(err),
+		)
 		return err
 	}
 
 	km.isRunning = false
+	logger.Info("键盘监控器已停止", zap.String("component", "keyboard"))
 	return nil
 }
 
@@ -149,6 +170,13 @@ func (km *KeyboardMonitor) GetHotkeyManager() *HotkeyManager {
 // Parameters:
 //   - event: 平台层的原始键盘事件
 func (km *KeyboardMonitor) handlePlatformEvent(event platform.KeyboardEvent) {
+	// Debug 级别记录键盘事件（开发时有用，生产环境可以关闭）
+	logger.Debug("捕获键盘事件",
+		zap.String("component", "keyboard"),
+		zap.Int("keycode", event.KeyCode),
+		zap.Uint64("modifiers", event.Modifiers),
+	)
+
 	// 1. 获取上下文
 	context := km.contextMgr.GetContext()
 
@@ -163,5 +191,10 @@ func (km *KeyboardMonitor) handlePlatformEvent(event platform.KeyboardEvent) {
 	businessEvent.WithContext(context)
 
 	// 4. 发布到事件总线
-	km.eventBus.Publish(string(events.EventTypeKeyboard), *businessEvent)
+	if err := km.eventBus.Publish(string(events.EventTypeKeyboard), *businessEvent); err != nil {
+		logger.Error("发布键盘事件失败",
+			zap.String("component", "keyboard"),
+			zap.Error(err),
+		)
+	}
 }

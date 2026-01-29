@@ -5,6 +5,8 @@ import (
 	"sync"
 
 	"github.com/chenyang-zz/flowmind/pkg/events"
+	"github.com/chenyang-zz/flowmind/pkg/logger"
+	"go.uber.org/zap"
 )
 
 // Engine 监控引擎，管理所有监控器
@@ -50,18 +52,27 @@ func (e *Engine) Start() error {
 	defer e.mu.Unlock()
 
 	if e.isRunning {
+		logger.Warn("监控引擎已在运行", zap.String("component", "engine"))
 		return fmt.Errorf("monitor engine already running")
 	}
+
+	logger.Info("启动监控引擎", zap.String("component", "engine"))
 
 	// 初始化键盘监控器
 	e.keyboard = NewKeyboardMonitor(e.eventBus)
 
 	// 启动键盘监控器
 	if err := e.keyboard.Start(); err != nil {
+		logger.Error("启动键盘监控器失败",
+			zap.String("component", "engine"),
+			zap.Error(err),
+		)
 		return fmt.Errorf("failed to start keyboard monitor: %w", err)
 	}
 
 	e.isRunning = true
+
+	logger.Info("监控引擎启动成功", zap.String("component", "engine"))
 
 	// 发布状态事件
 	statusEvent := events.NewEvent(events.EventTypeStatus, map[string]interface{}{
@@ -85,17 +96,26 @@ func (e *Engine) Stop() error {
 	defer e.mu.Unlock()
 
 	if !e.isRunning {
+		logger.Warn("监控引擎未运行", zap.String("component", "engine"))
 		return fmt.Errorf("monitor engine not running")
 	}
+
+	logger.Info("停止监控引擎", zap.String("component", "engine"))
 
 	// 停止键盘监控器
 	if e.keyboard != nil {
 		if err := e.keyboard.Stop(); err != nil {
+			logger.Error("停止键盘监控器失败",
+				zap.String("component", "engine"),
+				zap.Error(err),
+			)
 			return fmt.Errorf("failed to stop keyboard monitor: %w", err)
 		}
 	}
 
 	e.isRunning = false
+
+	logger.Info("监控引擎已停止", zap.String("component", "engine"))
 
 	// 发布状态事件
 	statusEvent := events.NewEvent(events.EventTypeStatus, map[string]interface{}{

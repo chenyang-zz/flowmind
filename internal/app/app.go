@@ -17,7 +17,9 @@ import (
 	"github.com/chenyang-zz/flowmind/internal/infrastructure/config"
 	"github.com/chenyang-zz/flowmind/internal/monitor"
 	"github.com/chenyang-zz/flowmind/pkg/events"
+	"github.com/chenyang-zz/flowmind/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"go.uber.org/zap"
 )
 
 /**
@@ -108,6 +110,8 @@ func New() *App {
  *   - error: 初始化过程中的错误
  */
 func (a *App) Startup(ctx context.Context) error {
+	logger.Info("应用启动中")
+
 	// 保存上下文
 	a.ctx = ctx
 
@@ -116,12 +120,16 @@ func (a *App) Startup(ctx context.Context) error {
 
 	// 启动监控引擎
 	if err := a.monitorEngine.Start(); err != nil {
+		logger.Error("启动监控引擎失败", zap.Error(err))
 		return fmt.Errorf("failed to start monitor engine: %w", err)
 	}
+
+	logger.Info("监控引擎启动成功")
 
 	// 启动事件转发（将后端事件推送到前端）
 	go a.forwardEvents()
 
+	logger.Info("应用启动完成")
 	return nil
 }
 
@@ -134,6 +142,8 @@ func (a *App) Startup(ctx context.Context) error {
  * 3. 释放资源
  */
 func (a *App) Shutdown() {
+	logger.Info("应用关闭中")
+
 	// 停止监控引擎
 	if a.monitorEngine != nil {
 		_ = a.monitorEngine.Stop()
@@ -143,6 +153,8 @@ func (a *App) Shutdown() {
 	// a.saveState()
 
 	// TODO: 释放其他资源
+
+	logger.Info("应用已关闭")
 }
 
 // ========== 导出方法（前端可调用） ==========
@@ -237,8 +249,14 @@ func (a *App) GetEvents(limit int) ([]map[string]interface{}, error) {
  * 这样前端可以实时接收后端的状态更新
  */
 func (a *App) forwardEvents() {
+	logger.Info("启动事件转发服务")
+
 	// 订阅所有事件
 	subscriberID := a.eventBus.Subscribe("*", func(event events.Event) error {
+		logger.Debug("转发事件到前端",
+			zap.String("type", string(event.Type)),
+		)
+
 		// 将事件推送到前端
 		runtime.EventsEmit(a.ctx, string(event.Type), event)
 		return nil
@@ -246,6 +264,8 @@ func (a *App) forwardEvents() {
 
 	// 保持订阅活跃
 	<-a.ctx.Done()
+
+	logger.Info("停止事件转发服务")
 	a.eventBus.Unsubscribe(subscriberID)
 }
 
