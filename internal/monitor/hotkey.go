@@ -38,6 +38,12 @@ const (
 	// ModifierFn Fn 键标志位
 	// 值为 0x800000
 	ModifierFn uint64 = 0x800000
+
+	// ModifierMask 修饰键掩码
+	// 只包含我们关心的修饰键：Command, Shift, Control, Option
+	// 用于过滤掉其他状态位（如 Caps Lock, Numeric Pad 等）
+	// 值为 0x1F0000 = Command | Shift | Control | Option
+	ModifierMask uint64 = ModifierCommand | ModifierShift | ModifierControl | ModifierOption
 )
 
 // keyNameToKeyCode 按键名称到键码的映射表
@@ -215,7 +221,8 @@ func parseHotkeyString(s string) (keyCode int, modifiers uint64, err error) {
 
 // Match 检查是否匹配给定的键盘事件
 //
-// 比较快捷键的 KeyCode 和 Modifiers 是否与给定的键盘事件完全匹配。
+// 比较快捷键的 KeyCode 和 Modifiers 是否与给定的键盘事件匹配。
+// 使用修饰键掩码来过滤掉不相关的状态位（如 Caps Lock、Numeric Pad 等）。
 //
 // Parameters:
 //   - keyCode: 按键代码
@@ -224,7 +231,9 @@ func parseHotkeyString(s string) (keyCode int, modifiers uint64, err error) {
 // Returns:
 //   - bool: true 表示匹配，false 表示不匹配
 func (h *Hotkey) Match(keyCode int, modifiers uint64) bool {
-	return h.KeyCode == keyCode && h.Modifiers == modifiers
+	// 使用掩码过滤掉不相关的修饰键位，只比较我们关心的修饰键
+	maskedModifiers := modifiers & ModifierMask
+	return h.KeyCode == keyCode && h.Modifiers == maskedModifiers
 }
 
 // String 返回快捷键的字符串表示
@@ -373,6 +382,10 @@ func (hm *HotkeyManager) Register(hotkeyStr string, callback HotkeyCallback) (st
 	logger.Info("注册快捷键",
 		zap.String("hotkey", hotkeyStr),
 		zap.String("id", reg.ID),
+		zap.Int("keycode", hotkey.KeyCode),
+		zap.Uint64("modifiers", hotkey.Modifiers),
+		zap.String("modifiers_hex", fmt.Sprintf("0x%x", hotkey.Modifiers)),
+		zap.Uint64("lookup_key", lookupKey),
 	)
 
 	return reg.ID, nil
@@ -604,19 +617,36 @@ func (hm *HotkeyManager) handleKeyboardEvent(event events.Event) error {
 		return nil // 无效事件，忽略
 	}
 
-	// 2. 构造快速查找键（keycode + modifiers 组合）
-	lookupKey := hm.buildLookupKey(keycode, modifiers)
+	// DEBUG: 打印所有键盘事件的 keycode 和 modifiers
+	logger.Debug("快捷键管理器收到键盘事件",
+		zap.Int("keycode", keycode),
+		zap.Uint64("modifiers", modifiers),
+		zap.String("modifiers_hex", fmt.Sprintf("0x%x", modifiers)),
+	)
 
-	// 3. 查找匹配的注册
+	// 2. 应用修饰键掩码，过滤掉不相关的状态位（如 Caps Lock、Numeric Pad 等）
+	maskedModifiers := modifiers & ModifierMask
+
+	// 3. 构造快速查找键（keycode + masked modifiers 组合）
+	lookupKey := hm.buildLookupKey(keycode, maskedModifiers)
+
+	// 4. 查找匹配的注册
 	hm.mu.RLock()
 	registrations := hm.keyCodeMap[lookupKey]
 	hm.mu.RUnlock()
 
 	if len(registrations) == 0 {
+		// DEBUG: 没有匹配的快捷键
+		logger.Debug("没有匹配的快捷键",
+			zap.Int("keycode", keycode),
+			zap.Uint64("modifiers", modifiers),
+			zap.Uint64("masked_modifiers", maskedModifiers),
+			zap.Uint64("lookup_key", lookupKey),
+		)
 		return nil // 没有匹配的快捷键
 	}
 
-	// 4. 触发所有匹配的快捷键回调
+	// 5. 触发所有匹配的快捷键回调
 	for _, reg := range registrations {
 		if !reg.Enabled {
 			continue // 跳过禁用的快捷键

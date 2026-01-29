@@ -646,3 +646,120 @@ func TestHotkeyManager_StartStop(t *testing.T) {
 		require.NoError(t, err, "未启动就停止不应失败")
 	})
 }
+
+// TestHotkeyWithModifierMask 测试修饰键掩码功能
+//
+// 验证快捷键匹配时能正确处理带有额外状态位（如 Caps Lock、Numeric Pad 等）的修饰键。
+// 这是修复快捷键无法匹配问题的关键测试。
+//
+// 测试场景：
+//   1. 注册快捷键 Cmd+Shift+H (modifiers = 0x120000)
+//   2. 模拟触发时带有额外状态位 (modifiers = 0x12010a，包含 Caps Lock 等状态)
+//   3. 验证快捷键仍然能匹配成功
+func TestHotkeyWithModifierMask(t *testing.T) {
+	eventBus := events.NewEventBus()
+	manager := NewHotkeyManager(eventBus)
+
+	// 1. 注册快捷键 Cmd+Shift+H
+	hotkey, err := NewHotkey("Cmd+Shift+H")
+	require.NoError(t, err, "快捷键创建不应失败")
+
+	callbackTriggered := false
+	var callbackHotkey *Hotkey
+
+	callback := func(reg *HotkeyRegistration, ctx *events.EventContext) {
+		callbackTriggered = true
+		callbackHotkey = reg.Hotkey
+	}
+
+	_, err = manager.Register("Cmd+Shift+H", callback)
+	require.NoError(t, err, "快捷键注册不应失败")
+
+	// 2. 启动管理器
+	err = manager.Start()
+	require.NoError(t, err, "启动管理器不应失败")
+	defer manager.Stop()
+
+	// 3. 模拟触发快捷键，带有额外的修饰键状态位
+	// 注册时 modifiers = 0x120000 (Cmd + Shift)
+	// 触发时 modifiers = 0x12010a (Cmd + Shift + 额外状态位，如 Caps Lock)
+	keycode := 4        // H 的键码
+	modifiers := uint64(0x12010a) // 包含额外状态位
+
+	// 构造键盘事件
+	event := events.NewEvent(events.EventTypeKeyboard, map[string]interface{}{
+		"keycode":   keycode,
+		"modifiers": modifiers,
+	})
+	event.WithContext(&events.EventContext{
+		Application: "TestApp",
+	})
+
+	// 发布事件
+	err = eventBus.Publish(string(events.EventTypeKeyboard), *event)
+	require.NoError(t, err, "发布事件不应失败")
+
+	// 等待回调被触发
+	time.Sleep(200 * time.Millisecond)
+
+	// 4. 验证回调被触发
+	assert.True(t, callbackTriggered, "快捷键应该被触发（即使带有额外修饰键状态位）")
+	assert.NotNil(t, callbackHotkey, "回调中的快捷键不应为 nil")
+	assert.Equal(t, hotkey.KeyCode, callbackHotkey.KeyCode, "快捷键 KeyCode 应匹配")
+	assert.Equal(t, hotkey.Modifiers, callbackHotkey.Modifiers, "快捷键 Modifiers 应匹配")
+}
+
+// TestHotkeyMatch_IgnoreExtraModifiers 测试 Match 函数忽略额外修饰键
+//
+// 验证 Hotkey.Match 方法能正确忽略额外的修饰键状态位。
+func TestHotkeyMatch_IgnoreExtraModifiers(t *testing.T) {
+	// 创建快捷键 Cmd+Shift+H
+	hotkey, err := NewHotkey("Cmd+Shift+H")
+	require.NoError(t, err, "快捷键创建不应失败")
+
+	// 测试用例：带有不同额外状态位的 modifiers
+	testCases := []struct {
+		name         string
+		modifiers    uint64
+		shouldMatch  bool
+	}{
+		{
+			name:        "精确匹配 (0x120000)",
+			modifiers:   0x120000, // Cmd + Shift
+			shouldMatch: true,
+		},
+		{
+			name:        "包含 Caps Lock (0x120100)",
+			modifiers:   0x120100, // Cmd + Shift + Caps Lock (假设)
+			shouldMatch: true,
+		},
+		{
+			name:        "包含额外状态位 (0x12010a)",
+			modifiers:   0x12010a, // Cmd + Shift + 额外位
+			shouldMatch: true,
+		},
+		{
+			name:        "包含 Numeric Pad 标志 (0x122000)",
+			modifiers:   0x122000, // Cmd + Shift + Numeric Pad
+			shouldMatch: true,
+		},
+		{
+			name:        "缺少 Shift (0x100000)",
+			modifiers:   0x100000, // 只有 Cmd
+			shouldMatch: false,
+		},
+		{
+			name:        "完全不匹配 (0x0)",
+			modifiers:   0x0, // 无修饰键
+			shouldMatch: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			matches := hotkey.Match(4, tc.modifiers) // keycode 4 = H
+			assert.Equal(t, tc.shouldMatch, matches,
+				"匹配结果应符合预期 (modifiers=0x%x)", tc.modifiers)
+		})
+	}
+}

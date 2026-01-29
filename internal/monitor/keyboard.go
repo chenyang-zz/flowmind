@@ -92,6 +92,12 @@ func (km *KeyboardMonitor) Start() error {
 				zap.String("component", "keyboard"),
 				zap.Error(err),
 			)
+		} else {
+			// 注册预定义的快捷键
+			registerPresetHotkeys(km.hotkeyManager, km.eventBus)
+			logger.Info("预定义快捷键已注册",
+				zap.String("component", "keyboard"),
+			)
 		}
 	}
 
