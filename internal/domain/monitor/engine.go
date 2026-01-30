@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/chenyang-zz/flowmind/pkg/events"
-	"github.com/chenyang-zz/flowmind/pkg/logger"
+	"github.com/chenyang-zz/flowmind/internal/infrastructure/logger"
 	"go.uber.org/zap"
 )
 

@@ -246,7 +246,7 @@ package main
 import (
     "fmt"
     "time"
-    "github.com/chenyang-zz/flowmind/internal/platform"
+    "github.com/chenyang-zz/flowmind/internal/infrastructure/platform"
 )
 
 func main() {

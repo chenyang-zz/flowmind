@@ -15,9 +15,9 @@ import (
 	"fmt"
 
 	"github.com/chenyang-zz/flowmind/internal/infrastructure/config"
-	"github.com/chenyang-zz/flowmind/internal/monitor"
+	"github.com/chenyang-zz/flowmind/internal/domain/monitor"
 	"github.com/chenyang-zz/flowmind/pkg/events"
-	"github.com/chenyang-zz/flowmind/pkg/logger"
+	"github.com/chenyang-zz/flowmind/internal/infrastructure/logger"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"go.uber.org/zap"
 )
