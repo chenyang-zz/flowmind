@@ -122,6 +122,9 @@ type Pattern struct {
 	// IsAutomated 是否已自动化
 	IsAutomated bool
 
+	// Description 模式描述（自动生成或手动添加）
+	Description string
+
 	// AIAnalysis AI分析结果
 	AIAnalysis *AIAnalysis
 }
