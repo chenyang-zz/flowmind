@@ -34,5 +34,14 @@
 ---
 
 **相关文档**：
-- [系统架构](../architecture/01-system-architecture.md)
-- [开发环境搭建](./01-development-setup.md)
+
+**前置文档**（上下阶段）:
+- [系统架构总览](../architecture/00-system-architecture.md) - 理解整体架构
+- [Phase 3: AI 助手](./04-phase3-assistant.md) - 实现 AI 面板
+- [开发环境搭建](./01-development-setup.md) - 配置开发环境
+
+**本阶段相关架构**:
+- [存储层详解](../architecture/06-storage-layer.md) - 向量数据库和知识存储
+
+**后续阶段**（下阶段）:
+- [Phase 5: 自动化](./06-phase5-automation.md) - 实现自动化引擎

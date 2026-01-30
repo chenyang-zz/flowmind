@@ -25,14 +25,30 @@
 - [安全设计](./design/05-security-design.md) - 权限和沙箱隔离
 
 ### 实施指南
+
+**实施指南文档说明**: 实施指南包含各阶段的实施计划、任务清单和验证标准。详细的核心代码和架构设计请参考"架构设计"部分的相关文档。
+
+每个阶段的实施文档都包含：
+- **前置文档**: 上下阶段文档,帮助理解上下文
+- **本阶段详细架构**: 链接到对应的架构文档,查看核心代码实现
+- **后续阶段**: 下阶段文档,了解后续实施计划
+
+#### 环境准备
 - [开发环境搭建](./implementation/01-development-setup.md) - 环境配置和工具安装
+
+#### 阶段实施计划
 - [Phase 1: 基础监控](./implementation/02-phase1-monitoring.md) - 监控引擎实现
+  - **详细架构**: [监控引擎](./architecture/02-monitor-engine.md) - 系统监控和事件捕获
 - [Phase 2: 模式识别](./implementation/03-phase2-patterns.md) - 模式挖掘实现
+  - **详细架构**: [分析引擎](./architecture/03-analyzer-engine.md) - 模式识别和序列挖掘
+  - **详细架构**: [AI 服务](./architecture/04-ai-service.md) - Claude/Ollama 集成
+  - **详细架构**: [存储层](./architecture/06-storage-layer.md) - 数据库和向量存储
 - [Phase 3: AI 助手](./implementation/04-phase3-assistant.md) - AI 面板实现
 - [Phase 4: 知识管理](./implementation/05-phase4-knowledge.md) - 剪藏和知识图谱
 - [Phase 5: 自动化](./implementation/06-phase5-automation.md) - 自动化引擎实现
+  - **详细架构**: [自动化引擎](./architecture/05-automation-engine.md) - 脚本生成和执行
 - [Phase 6: 可视化](./implementation/07-phase6-visualization.md) - 仪表板实现
-- [Phase 7: 优化](./implementation/08-phase7-optimization.md) - 性能优化和打磨
+- [Phase 7: 优化](./implementation/07-phase7-privacy-protection.md) - 性能优化和隐私保护
 
 ### API 参考
 - [Go API 参考](./api/go-api.md) - 后端 API 文档

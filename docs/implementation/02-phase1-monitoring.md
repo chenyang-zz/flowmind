@@ -211,6 +211,11 @@ OpenAIPanel() → 前端响应
 
 ## 🔧 核心组件实现
 
+本阶段的核心组件实现和详细代码说明请参考架构文档：
+
+- **监控引擎**: [监控引擎架构文档](../architecture/02-monitor-engine.md) - 包含引擎设计、接口定义和实现细节
+- **系统架构**: [系统架构总览](../architecture/00-system-architecture.md) - 完整的分层设计和组件关系
+
 ### 3.1 监控引擎 (Engine)
 
 **文件**: `internal/monitor/engine.go`
@@ -223,100 +228,7 @@ OpenAIPanel() → 前端响应
 - 发布监控引擎的状态事件
 - 提供统一的访问接口
 
-#### 核心结构
-
-```go
-// Engine 监控引擎，管理所有监控器
-type Engine struct {
-    // keyboard 键盘监控器实例
-    keyboard Monitor
-
-    // clipboard 剪贴板监控器实例
-    clipboard Monitor
-
-    // eventBus 事件总线，用于发布和订阅事件
-    eventBus *events.EventBus
-
-    // isRunning 引擎运行状态标志
-    isRunning bool
-
-    // mu 读写锁，保护并发访问
-    mu sync.RWMutex
-}
-```
-
-#### 关键特性
-
-**1. 线程安全的生命周期管理**
-
-```go
-// Start 启动监控引擎
-func (e *Engine) Start() error {
-    e.mu.Lock()
-    defer e.mu.Unlock()
-
-    if e.isRunning {
-        return fmt.Errorf("monitor engine already running")
-    }
-
-    // 初始化并启动键盘监控器
-    e.keyboard = NewKeyboardMonitor(e.eventBus)
-    if err := e.keyboard.Start(); err != nil {
-        return fmt.Errorf("failed to start keyboard monitor: %w", err)
-    }
-
-    // 初始化并启动剪贴板监控器
-    e.clipboard = NewClipboardMonitor(e.eventBus)
-    if err := e.clipboard.Start(); err != nil {
-        // 剪贴板监控器启动失败不影响引擎启动
-        logger.Warn("剪贴板监控器启动失败，但引擎继续运行")
-    }
-
-    e.isRunning = true
-
-    // 发布状态事件
-    statusEvent := events.NewEvent(events.EventTypeStatus, map[string]interface{}{
-        "status":   "started",
-        "monitors": []string{"keyboard", "clipboard"},
-    })
-    e.eventBus.Publish(string(events.EventTypeStatus), *statusEvent)
-
-    return nil
-}
-```
-
-**2. 优雅的错误处理**
-
-- 键盘监控器启动失败：引擎启动失败
-- 剪贴板监控器启动失败：记录警告，引擎继续运行
-- 保证部分功能可用的情况下尽量提供完整服务
-
-**3. 状态事件发布**
-
-```go
-// 发布引擎启动事件
-statusEvent := events.NewEvent(events.EventTypeStatus, map[string]interface{}{
-    "status":   "started",
-    "monitors": []string{"keyboard", "clipboard"},
-})
-e.eventBus.Publish(string(events.EventTypeStatus), *statusEvent)
-```
-
-#### 使用示例
-
-```go
-// 创建监控引擎
-eventBus := events.NewEventBus()
-engine := monitor.NewEngine(eventBus)
-
-// 启动引擎
-if err := engine.Start(); err != nil {
-    log.Fatal("启动失败:", err)
-}
-
-// 停止引擎
-defer engine.Stop()
-```
+**详细实现**: 参见 [监控引擎架构文档](../architecture/02-monitor-engine.md#监控引擎)
 
 ---
 
@@ -326,109 +238,15 @@ defer engine.Stop()
 - `internal/monitor/keyboard.go` (业务层)
 - `internal/platform/keyboard_darwin.go` (平台层)
 
-#### 平台层实现
+#### 技术要点
 
-**技术栈**: Core Graphics Event Tap
-
-```c
-// CGO 回调函数
-static CGEventRef callback(CGEventTapProxy proxy, CGEventType type,
-                          CGEventRef event, void *refcon) {
-    // 只处理键盘按下和修饰键变化事件
-    if (type == kCGEventKeyDown || type == kCGEventFlagsChanged) {
-        // 获取按键代码
-        CGKeyCode keycode = (CGKeyCode)CGEventGetIntegerValueField(
-            event, kCGKeyboardEventKeycode);
-
-        // 获取修饰键标志（Command, Shift, Control, Option 等）
-        CGEventFlags flags = CGEventGetFlags(event);
-
-        // 回调到 Go 层处理
-        goKeyboardCallback((int)keycode, (int)flags);
-    }
-
-    return event;
-}
-```
-
-**关键点**:
-- **事件掩码**: 只监听 `kCGEventKeyDown` 和 `kCGEventFlagsChanged`
-- **会话级别**: `kCGSessionEventTap` - 监听当前用户会话的所有事件
-- **事件传递**: 返回原始事件，允许事件继续传递到其他应用
+- **平台层**: 使用 Core Graphics Event Tap 捕获键盘事件
+- **业务层**: 添加应用上下文，发布到事件总线
+- **快捷键管理**: 快捷键注册、匹配和触发
 
 **权限要求**: ⚠️ 需要辅助功能权限
 
-#### 业务层实现
-
-```go
-// KeyboardMonitor 键盘监控器（业务层）
-type KeyboardMonitor struct {
-    // platform 平台层键盘监控器
-    platform platform.KeyboardMonitor
-
-    // eventBus 事件总线
-    eventBus *events.EventBus
-
-    // contextMgr 上下文管理器
-    contextMgr platform.ContextProvider
-
-    // hotkeyManager 快捷键管理器
-    hotkeyManager *HotkeyManager
-
-    // isRunning 监控器运行状态标志
-    isRunning bool
-}
-```
-
-**工作流程**:
-
-```go
-// handlePlatformEvent 处理平台层传来的原始键盘事件
-func (km *KeyboardMonitor) handlePlatformEvent(event platform.KeyboardEvent) {
-    // 1. 获取上下文
-    context := km.contextMgr.GetContext()
-
-    // 2. 构造业务事件数据
-    data := map[string]interface{}{
-        "keycode":   event.KeyCode,
-        "modifiers": event.Modifiers,
-    }
-
-    // 3. 创建业务事件
-    businessEvent := events.NewEvent(events.EventTypeKeyboard, data)
-    businessEvent.WithContext(context)
-
-    // 4. 发布到事件总线
-    km.eventBus.Publish(string(events.EventTypeKeyboard), *businessEvent)
-}
-```
-
-#### 快捷键管理
-
-**预定义快捷键**:
-
-```go
-var presetHotkeys = []HotkeyConfig{
-    {
-        ID:          "ai.panel",
-        KeyCode:     46, // M 键
-        Modifiers:   platform.ModifierCmd | platform.ModifierShift | platform.ModifierControl,
-        Description: "打开 AI 面板",
-    },
-}
-```
-
-**快捷键匹配**:
-
-```go
-// matchModifiers 匹配修饰键（忽略 CapsLock 等非关键修饰键）
-func (hm *HotkeyManager) matchModifiers(eventMods, targetMods uint64) bool {
-    // 清理标志位，只保留 Cmd/Shift/Control/Option
-    eventClean := eventMods & 0xFFFFF
-    targetClean := targetMods & 0xFFFFF
-    return eventClean == targetClean
-}
-```
+**详细实现**: 参见 [监控引擎架构文档 - 键盘监控](../architecture/02-monitor-engine.md#键盘监控)
 
 ---
 
@@ -438,158 +256,18 @@ func (hm *HotkeyManager) matchModifiers(eventMods, targetMods uint64) bool {
 - `internal/monitor/clipboard.go` (业务层)
 - `internal/platform/clipboard_darwin.go` (平台层)
 
-#### 平台层实现
+#### 技术要点
 
-**技术栈**: NSPasteboard API
-
-```c
-// getClipboardChangeCount 获取剪贴板变更计数
-long long getClipboardChangeCount() {
-    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
-    if (pasteboard == nil) {
-        return -1;
-    }
-
-    return [pasteboard changeCount];
-}
-
-// getClipboardContent 获取剪贴板内容
-char* getClipboardContent() {
-    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
-
-    // 检查是否包含字符串类型
-    NSString *type = [pasteboard availableTypeFromArray:@[NSPasteboardTypeString]];
-    if (type == nil) {
-        return NULL;
-    }
-
-    // 获取字符串内容
-    NSString *content = [pasteboard stringForType:NSPasteboardTypeString];
-    if (content == nil) {
-        return NULL;
-    }
-
-    // 转换为 C 字符串
-    const char *cString = [content UTF8String];
-    return strdup(cString);
-}
-```
-
-**检测机制**:
-
-```go
-// DarwinClipboardMonitor macOS 平台的剪贴板监控器实现
-type DarwinClipboardMonitor struct {
-    // callback 用户注册的剪贴板事件回调函数
-    callback ClipboardCallback
-
-    // lastChangeCount 上一次记录的剪贴板变更计数
-    lastChangeCount int64
-
-    // checkInterval 检查间隔（默认 500ms）
-    checkInterval time.Duration
-}
-
-// run 监控循环
-func (m *DarwinClipboardMonitor) run() {
-    ticker := time.NewTicker(m.checkInterval)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-ticker.C:
-            // 检查 changeCount 是否变化
-            currentChangeCount := C.getClipboardChangeCount()
-            if m.lastChangeCount < currentChangeCount {
-                m.lastChangeCount = currentChangeCount
-
-                // 获取新内容
-                content := C.getClipboardContent()
-                if content != nil {
-                    defer C.freeString(content)
-
-                    // 触发回调
-                    m.callback(platform.ClipboardEvent{
-                        Content: C.GoString(content),
-                        Type:    "public.utf8-plain-text",
-                        Size:    int64(len(C.GoString(content))),
-                    })
-                }
-            }
-
-        case <-m.stopChan:
-            return
-        }
-    }
-}
-```
+- **平台层**: 使用 NSPasteboard API 轮询检测
+- **双重去重**: changeCount + 内容对比
+- **检测间隔**: 500ms 轮询
 
 **优势**:
-- ✅ 无需特殊权限（与键盘监控不同）
-- ✅ 低 CPU 占用（500ms 轮询间隔）
-- ✅ 可靠的检测机制（changeCount 保证）
+- ✅ 无需特殊权限
+- ✅ 低 CPU 占用
+- ✅ 可靠的检测机制
 
-#### 业务层实现
-
-**双重去重机制**:
-
-```go
-// ClipboardMonitor 剪贴板监控器（业务层）
-type ClipboardMonitor struct {
-    // platform 平台层剪贴板监控器
-    platform platform.ClipboardMonitor
-
-    // lastContent 上一次记录的剪贴板内容，用于去重
-    lastContent string
-}
-
-// handlePlatformEvent 处理平台层传来的剪贴板变化事件
-func (cm *ClipboardMonitor) handlePlatformEvent(event platform.ClipboardEvent) {
-    // 1. 检查内容是否与上次相同（业务层去重）
-    if event.Content == cm.lastContent {
-        logger.Debug("剪贴板内容未变化，忽略")
-        return
-    }
-
-    cm.mu.Lock()
-    cm.lastContent = event.Content
-    cm.mu.Unlock()
-
-    // 记录日志（截取内容以避免日志过长）
-    contentPreview := event.Content
-    if len(contentPreview) > 100 {
-        contentPreview = contentPreview[:100] + "..."
-    }
-
-    logger.Info("检测到剪贴板内容变化",
-        zap.String("type", event.Type),
-        zap.Int64("size", event.Size),
-        zap.String("preview", contentPreview),
-    )
-
-    // 2. 获取上下文
-    context := cm.contextMgr.GetContext()
-
-    // 3. 构造业务事件
-    data := map[string]interface{}{
-        "content": event.Content,
-        "type":    event.Type,
-        "size":    event.Size,
-        "length":  len(event.Content),
-    }
-
-    // 4. 创建并发布事件
-    businessEvent := events.NewEvent(events.EventTypeClipboard, data)
-    businessEvent.WithContext(context)
-    cm.eventBus.Publish(string(events.EventTypeClipboard), *businessEvent)
-}
-```
-
-**去重机制说明**:
-
-1. **平台层去重**: 通过 `changeCount` 判断是否真的发生了变化
-2. **业务层去重**: 通过内容对比防止重复触发
-3. **日志优化**: 内容预览截断到 100 字符
+**详细实现**: 参见 [监控引擎架构文档 - 剪贴板监控](../architecture/02-monitor-engine.md#剪贴板监控)
 
 ---
 
@@ -599,102 +277,18 @@ func (cm *ClipboardMonitor) handlePlatformEvent(event platform.ClipboardEvent) {
 
 #### 功能
 
-为每个监控事件添加丰富的上下文信息，包括：
+为每个监控事件添加丰富的上下文信息：
 - 应用名称
 - Bundle ID（唯一标识符）
 - 窗口标题
 
-#### 平台层实现
-
-**获取应用信息**:
-
-```c
-// getFrontmostAppName 获取当前最前端应用的本地化名称
-char* getFrontmostAppName() {
-    NSRunningApplication *app = [NSWorkspace sharedWorkspace].frontmostApplication;
-    if (app == nil) {
-        return strdup("");
-    }
-
-    NSString *appName = [app localizedName];
-    const char* cName = [appName UTF8String];
-    return strdup(cName);
-}
-
-// getBundleID 获取最前端应用的 Bundle Identifier
-char* getBundleID() {
-    NSRunningApplication *app = [NSWorkspace sharedWorkspace].frontmostApplication;
-    if (app == nil) {
-        return strdup("");
-    }
-
-    NSString *bundleID = [app bundleIdentifier];
-    const char* cBundleID = [bundleID UTF8String];
-    return strdup(cBundleID);
-}
-```
-
-**获取窗口标题**:
-
-```c
-// getFocusedWindowTitle 获取当前焦点窗口的标题
-char* getFocusedWindowTitle() {
-    // 获取最前端应用
-    NSRunningApplication *app = [NSWorkspace sharedWorkspace].frontmostApplication;
-
-    // 创建应用的 AXUIElement
-    AXUIElementRef appElement = AXUIElementCreateApplication([app processIdentifier]);
-
-    // 获取焦点窗口
-    AXUIElementRef window = NULL;
-    AXError err = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute, (CFTypeRef*)&window);
-
-    // 获取窗口标题
-    CFStringRef title = NULL;
-    err = AXUIElementCopyAttributeValue(window, kAXTitleAttribute, (CFTypeRef*)&title);
-
-    // 转换为 C 字符串
-    NSString *nsTitle = (__bridge NSString*)title;
-    const char* cTitle = [nsTitle UTF8String];
-    char* result = strdup(cTitle);
-
-    // 清理资源
-    CFRelease(window);
-    CFRelease(appElement);
-
-    return result;
-}
-```
+**技术要点**:
+- 使用 NSWorkspace 获取应用信息
+- 使用 Accessibility API 获取窗口标题
 
 **权限要求**: ⚠️ 窗口标题获取需要辅助功能权限
 
-#### 业务层使用
-
-```go
-// GetContext 获取完整的应用上下文
-func (p *DarwinContextProvider) GetContext() *events.EventContext {
-    return &events.EventContext{
-        Application: p.getAppName(),
-        BundleID:    p.getBundleID(),
-        WindowTitle: p.getFocusedWindowTitle(),
-    }
-}
-```
-
-**事件上下文集成**:
-
-```go
-// 创建事件
-event := events.NewEvent(events.EventTypeKeyboard, data)
-
-// 附加上下文
-event.WithContext(contextMgr.GetContext())
-
-// 事件现在包含完整的上下文信息
-// event.Context.Application
-// event.Context.BundleID
-// event.Context.WindowTitle
-```
+**详细实现**: 参见 [监控引擎架构文档 - 上下文管理](../architecture/02-monitor-engine.md#上下文管理)
 
 ---
 
@@ -704,118 +298,29 @@ event.WithContext(contextMgr.GetContext())
 
 #### 核心功能
 
-**发布-订阅模式**:
+- 发布-订阅模式
+- 通配符订阅支持
+- 异步事件处理
+- 中间件链支持（日志、恢复、限流）
+
+**使用示例**:
 
 ```go
-// EventBus 事件总线
-type EventBus struct {
-    // subscribers 订阅者映射：事件类型 -> 订阅者列表
-    subscribers map[string][]*Subscriber
+// 创建事件总线
+eventBus := events.NewEventBus()
 
-    // middleware 中间件链
-    middleware []Middleware
-
-    // asyncEnabled 是否启用异步发布
-    asyncEnabled bool
-}
-```
-
-#### 订阅事件
-
-**1. 基础订阅**:
-
-```go
-// 订阅特定类型的事件
-subscriberID := eventBus.Subscribe(string(events.EventTypeKeyboard), func(event events.Event) error {
-    log.Printf("收到键盘事件: %+v", event)
-    return nil
-})
-```
-
-**2. 通配符订阅**:
-
-```go
 // 订阅所有事件
-subscriberID := eventBus.Subscribe("*", func(event events.Event) error {
+eventBus.Subscribe("*", func(event events.Event) error {
     log.Printf("收到事件: %s", event.Type)
     return nil
 })
+
+// 发布事件
+event := events.NewEvent(events.EventTypeKeyboard, data)
+eventBus.Publish(string(events.EventTypeKeyboard), event)
 ```
 
-**3. 带过滤器订阅**:
-
-```go
-// 只处理来自 Chrome 的键盘事件
-subscriberID := eventBus.SubscribeWithFilter(
-    string(events.EventTypeKeyboard),
-    func(event events.Event) error {
-        // 处理事件
-        return nil
-    },
-    func(event events.Event) bool {
-        // 过滤器：只处理 Chrome 的事件
-        return event.Context.BundleID == "com.google.Chrome"
-    },
-)
-```
-
-**4. 一次性订阅**:
-
-```go
-// 只处理一次事件
-subscriberID := eventBus.SubscribeOnce(string(events.EventTypeStatus), func(event events.Event) error {
-    log.Printf("引擎状态: %v", event.Data)
-    return nil
-})
-```
-
-#### 发布事件
-
-**同步发布**:
-
-```go
-// 会等待所有订阅者处理完成
-err := eventBus.Publish(string(events.EventTypeKeyboard), *businessEvent)
-```
-
-**异步发布**:
-
-```go
-// 不等待订阅者处理，立即返回
-eventBus.PublishAsync(string(events.EventTypeKeyboard), *businessEvent)
-```
-
-#### 中间件支持
-
-**恢复中间件**:
-
-```go
-// 防止事件处理函数中的 panic 导致程序崩溃
-eventBus.Use(events.RecoveryMiddleware())
-```
-
-**日志中间件**:
-
-```go
-// 记录所有事件的处理
-eventBus.Use(events.LoggingMiddleware(func(event events.Event) {
-    log.Printf("事件处理: %s", event.Type)
-}))
-```
-
-**限流中间件**:
-
-```go
-// 限制每秒最多处理 100 个事件
-eventBus.Use(events.RateLimitMiddleware(100))
-```
-
-#### 优雅关闭
-
-```go
-// 停止事件总线，等待所有正在处理的事件完成（最多等待 30 秒）
-err := eventBus.Stop(30 * time.Second)
-```
+**详细实现**: 参见 [系统架构文档 - 事件系统](../architecture/00-system-architecture.md#事件系统-pkgevents)
 
 ---
 
@@ -854,33 +359,12 @@ flowmind/
 
 **核心接口**:
 
-```go
-// Event 统一事件结构
-type Event struct {
-    ID        string                 // 事件唯一标识
-    Type      EventType              // 事件类型
-    Timestamp time.Time              // 时间戳
-    Data      map[string]interface{} // 事件数据
-    Context   *EventContext          // 上下文信息
-}
+本步骤实现了完整的事件总线系统，包括：
+- `Event` - 统一事件结构（ID、类型、时间戳、数据、上下文）
+- `EventContext` - 事件上下文（应用、Bundle ID、窗口标题等）
+- `EventType` - 事件类型枚举（键盘、剪贴板、应用切换、状态等）
 
-// EventContext 事件上下文
-type EventContext struct {
-    Application string  // 应用名称
-    BundleID    string  // Bundle ID (macOS)
-    WindowTitle string  // 窗口标题
-    FilePath    string  // 文件路径
-    Selection   string  // 选中文本
-}
-
-// EventType 事件类型枚举
-const (
-    EventTypeKeyboard   EventType = "keyboard"    // 键盘事件
-    EventTypeClipboard  EventType = "clipboard"   // 剪贴板事件
-    EventTypeAppSwitch  EventType = "app_switch"  // 应用切换（待实现）
-    EventTypeStatus     EventType = "status"      // 状态事件
-)
-```
+**详细实现**: 参见 [系统架构文档 - 事件系统](../architecture/00-system-architecture.md#事件系统-pkgevents)
 
 **验证标准**:
 - ✅ 支持发布-订阅模式
@@ -907,30 +391,9 @@ const (
    - 应用名称和 Bundle ID
    - 窗口标题需要辅助功能权限
 
-**CGO 封装示例**:
+**技术要点**: 使用 CGO 封装 macOS 原生 API
 
-```go
-/*
-#cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework CoreGraphics -framework Cocoa
-
-#import <CoreGraphics/CoreGraphics.h>
-
-// 声明 Go 回调函数
-void goKeyboardCallback(int keyCode, int flags);
-*/
-import "C"
-
-// CGEventTap 回调
-//export goKeyboardCallback
-func goKeyboardCallback(keyCode C.int, flags C.int) {
-    // 回调到 Go 层
-    callback(platform.KeyboardEvent{
-        KeyCode:   int(keyCode),
-        Modifiers: uint64(flags),
-    })
-}
-```
+**详细实现**: 参见 [监控引擎架构文档](../architecture/02-monitor-engine.md)
 
 **验证标准**:
 - ✅ 键盘事件捕获成功
@@ -945,27 +408,18 @@ func goKeyboardCallback(keyCode C.int, flags C.int) {
 
 **监控器接口**:
 
-```go
-// Monitor 监控器接口
-//
-// 所有监控器都必须实现此接口，提供统一的生命周期管理
-type Monitor interface {
-    // Start 启动监控器
-    Start() error
-
-    // Stop 停止监控器
-    Stop() error
-
-    // IsRunning 检查运行状态
-    IsRunning() bool
-}
-```
+所有监控器实现统一的 `Monitor` 接口，提供：
+- `Start()` - 启动监控器
+- `Stop()` - 停止监控器
+- `IsRunning()` - 检查运行状态
 
 **实现要点**:
 - 订阅平台层事件
 - 添加应用上下文
 - 发布到事件总线
 - 线程安全的状态管理
+
+**详细实现**: 参见 [监控引擎架构文档](../architecture/02-monitor-engine.md)
 
 **验证标准**:
 - ✅ 所有监控器独立运行
@@ -999,6 +453,8 @@ if err := engine.Start(); err != nil {
 defer engine.Stop()
 ```
 
+**详细实现**: 参见 [监控引擎架构文档](../architecture/02-monitor-engine.md#监控引擎)
+
 **验证标准**:
 - ✅ 引擎启动成功
 - ✅ 所有监控器运行
@@ -1015,18 +471,9 @@ defer engine.Stop()
 - 修饰键状态匹配
 - 回调函数触发
 
-**预定义快捷键**:
+**预定义快捷键**: 已实现 Cmd+Shift+M 等快捷键用于打开 AI 面板
 
-```go
-var presetHotkeys = []HotkeyConfig{
-    {
-        ID:          "ai.panel",
-        KeyCode:     46, // M
-        Modifiers:   platform.ModifierCmd | platform.ModifierShift | platform.ModifierControl,
-        Description: "打开 AI 面板",
-    },
-}
-```
+**详细实现**: 参见 [监控引擎架构文档 - 快捷键监控](../architecture/02-monitor-engine.md#快捷键监控)
 
 **验证标准**:
 - ✅ 快捷键注册成功
@@ -1204,81 +651,21 @@ cm.lastContent = event.Content
 
 ## 🛠️ 遇到的挑战和解决方案
 
+本阶段开发过程中遇到的主要挑战及其解决方案：
+
 ### 挑战 1: CGO 回调崩溃
-
-**问题**: C 回调中调用 Go 函数导致崩溃
-
-**原因**: Go 的 goroutine 调度器与 C 线程不兼容
-
-**解决**: 使用 `runtime.LockOSThread()` 固定线程
-
-```go
-func run() {
-    // 固定到当前 OS 线程
-    runtime.LockOSThread()
-    defer runtime.UnlockOSThread()
-
-    // 运行 CFRunLoop
-    for {
-        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.1, false)
-        if stopped {
-            break
-        }
-    }
-}
-```
-
----
+- **问题**: C 回调中调用 Go 函数导致崩溃
+- **解决**: 使用 `runtime.LockOSThread()` 固定线程
 
 ### 挑战 2: 修饰键状态位
-
-**问题**: CapsLock 等非关键修饰键干扰匹配
-
-**现象**:
-- 用户按下 `Cmd+M`
-- 但如果 CapsLock 开启，修饰键是 `Cmd+CapsLock+M`
-- 导致匹配失败
-
-**解决**: 清理标志位，只保留关键修饰键
-
-```go
-func (hm *HotkeyManager) matchModifiers(eventMods, targetMods uint64) bool {
-    // 使用掩码清理非关键修饰键
-    // 0xFFFFF 保留: Cmd, Shift, Control, Option
-    // 忽略: CapsLock (1<<16), NumLock 等
-    eventClean := eventMods & 0xFFFFF
-    targetClean := targetMods & 0xFFFFF
-    return eventClean == targetClean
-}
-```
-
----
+- **问题**: CapsLock 等非关键修饰键干扰匹配
+- **解决**: 清理标志位，只保留关键修饰键（Cmd/Shift/Control/Option）
 
 ### 挑战 3: 剪贴板重复触发
+- **问题**: 相同内容多次触发事件
+- **解决**: 双重去重机制（平台层 changeCount + 业务层内容对比）
 
-**问题**: 相同内容多次触发事件
-
-**原因**:
-- `changeCount` 变化但内容相同（应用复制了多次相同内容）
-
-**解决**: 双重去重机制
-
-1. **平台层**: 使用 `changeCount` 作为第一道防线
-2. **业务层**: 内容对比作为第二道防线
-
-```go
-// 平台层去重
-if m.lastChangeCount < currentChangeCount {
-    m.lastChangeCount = currentChangeCount
-    // 触发回调
-}
-
-// 业务层去重
-if event.Content == cm.lastContent {
-    return // 忽略重复
-}
-cm.lastContent = event.Content
-```
+**详细实现**: 参见 [监控引擎架构文档](../architecture/02-monitor-engine.md)
 
 ---
 
@@ -1287,152 +674,28 @@ cm.lastContent = event.Content
 虽然这些功能在架构文档中已有详细设计，但计划在后续阶段实现。以下为简要说明：
 
 ### 1. 应用切换监控
-
-**事件类型**: `EventTypeAppSwitch` (已定义)
-
-**功能描述**:
-- 检测当前活动应用的变化
-- 记录应用切换事件（从哪个应用切换到哪个应用）
-- 统计应用使用时长（应用会话）
-- 发布 `EventTypeAppSession` 事件
-
-**核心组件**:
-```go
-// 计划实现的组件
-- internal/domain/monitor/application.go  (应用切换监控器)
-- internal/domain/monitor/app_tracker.go   (应用会话追踪器)
-```
-
-**实现要点**:
-- 轮询检测前端应用变化（1秒间隔）
-- 记录应用切换历史
-- 统计应用使用时长
-- 发布应用会话事件
-
-**预计实现阶段**: Phase 2
-
----
+- **事件类型**: `EventTypeAppSwitch` (已定义)
+- **功能**: 检测应用切换、记录应用使用时长、发布应用会话事件
+- **预计实现阶段**: Phase 2
 
 ### 2. 权限管理系统
-
-**事件类型**: `EventTypePermission` (已定义)
-
-**功能描述**:
-- 检查辅助功能权限
-- 在权限缺失时提示用户
-- 提供打开系统设置的快捷方式
-- 监控器启动前的权限验证
-
-**核心功能**:
-```go
-// 计划实现的功能
-func CheckAccessibilityPermission() bool
-func CheckClipboardPermission() bool
-func PromptUserForPermission(permissionType string) error
-```
-
-**实现要点**:
-- 使用 `robotgo` 或原生 API 检查权限状态
-- 友好的权限提示对话框
-- 一键打开系统设置面板
-- 权限变化监听
-
-**预计实现阶段**: Phase 2
-
----
+- **事件类型**: `EventTypePermission` (已定义)
+- **功能**: 检查辅助功能权限、提示用户、打开系统设置
+- **预计实现阶段**: Phase 2
 
 ### 3. 性能优化组件
-
-#### 3.1 事件过滤器 (EventFilter)
-
-**功能描述**:
-- 过滤过于频繁的事件
-- 防止事件风暴
-- 可配置的最小间隔时间
-
-**使用场景**:
-```go
-// 示例：防止键盘事件过于频繁
-filter := NewEventFilter(100 * time.Millisecond)
-if !filter.ShouldPass(event) {
-    return // 忽略事件
-}
-```
-
-**实现要点**:
-- 按事件类型 + 应用名称进行分组
-- 记录每组最后一次事件时间
-- 可配置的最小间隔
-
-#### 3.2 批量处理器 (EventBatcher)
-
-**功能描述**:
-- 批量收集事件
-- 达到批次大小或超时后统一处理
-- 减少系统调用次数
-
-**使用场景**:
-```go
-// 示例：批量写入数据库
-batcher := NewEventBatcher(100, 1*time.Second, dbWriter)
-batcher.Add(event)
-```
-
-**实现要点**:
-- 可配置的批次大小
-- 可配置的超时时间
-- 优雅关闭（刷新剩余事件）
-
-**预计实现阶段**: Phase 3（性能优化阶段）
-
----
+- **事件过滤器**: 过滤过于频繁的事件
+- **批量处理器**: 批量收集事件，减少系统调用
+- **预计实现阶段**: Phase 3
 
 ### 4. 剪贴板隐私保护
-
-**功能描述**:
-- 过滤敏感应用（密码管理器）
-- 检测敏感内容模式（密码、信用卡号）
-- 限制记录的内容长度
-- 用户可配置的过滤规则
-
-**核心组件**:
-```go
-// 计划在阶段7实现
-type ClipboardFilter struct {
-    sensitivePatterns []string
-    ignoredApps       []string
-    maxLength         int
-}
-
-func (cf *ClipboardFilter) ShouldRecord(content string, app string) bool
-```
-
-**实现要点**:
-- 正则表达式匹配敏感内容
-- 应用黑名单/白名单
-- 内容长度限制（如 10KB）
-- 用户可配置规则
-
-**预计实现阶段**: Phase 7（隐私与安全阶段）
-
----
+- **功能**: 过滤敏感应用、检测敏感内容、限制记录长度
+- **预计实现阶段**: Phase 7
 
 ### 5. 文件系统监控
-
-**事件类型**: `EventTypeFileSystem` (已定义)
-
-**功能描述**:
-- 监控文件系统变化
-- 检测文件的创建、修改、删除、重命名
-- 支持递归监控目录
-
-**实现要点**:
-- 使用 `fsnotify` 或原生 API
-- 递归监控目录
-- 过滤系统文件和临时文件
-- 支持路径白名单/黑名单
-
-**预计实现阶段**: Phase 4（数据持久化阶段）
+- **事件类型**: `EventTypeFileSystem` (已定义)
+- **功能**: 监控文件系统变化（创建、修改、删除、重命名）
+- **预计实现阶段**: Phase 4
 
 ---
 
@@ -1469,9 +732,15 @@ func (cf *ClipboardFilter) ShouldRecord(content string, app string) bool
 
 ### 相关文档链接
 
-- [系统架构](../architecture/00-system-architecture.md)
-- [监控引擎详解](../architecture/02-monitor-engine.md)
-- [Phase 2: 模式识别](./03-phase2-patterns.md)
+**前置文档**（上下阶段）:
+- [系统架构总览](../architecture/00-system-architecture.md) - 理解整体架构和分层设计
+- [开发环境搭建](./01-development-setup.md) - 配置开发环境
+
+**本阶段详细架构**:
+- [监控引擎详解](../architecture/02-monitor-engine.md) - 核心代码和实现细节
+
+**后续阶段**（下阶段）:
+- [Phase 2: 模式识别](./03-phase2-patterns.md) - 实现模式挖掘和分析引擎
 
 ---
 
