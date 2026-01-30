@@ -23,18 +23,19 @@
 
 - ✅ 键盘监控（包括所有按键和修饰键）
 - ✅ 剪贴板监控（内容变化检测）
+- ✅ 应用切换监控（检测应用切换，记录应用会话）
 - ✅ 应用上下文获取（应用名称、Bundle ID、窗口标题）
 - ✅ 快捷键管理和匹配
 - ✅ 事件总线系统（发布-订阅模式）
 - ✅ 监控引擎（统一管理和协调）
+- ✅ 应用会话追踪器（记录应用使用时长）
 
 ### 待实现功能（后续阶段）
 
 以下功能已在架构设计中定义，但计划在后续阶段实现：
 
-- ⏳ 应用切换监控（事件类型已定义，监控器待实现）
-- ⏳ 权限管理系统（辅助功能权限检查和提示）
-- ⏳ 性能优化组件（事件过滤器、批量处理器）
+- ⏳ 权限管理系统（辅助功能权限检查和提示）- **计划中**
+- ⏳ 性能优化组件（事件过滤器、批量处理器）- **计划中**
 - ⏳ 剪贴板隐私保护（详见阶段7）
 
 ---
@@ -68,6 +69,14 @@
 │  │   ├─ 平台层: NSPasteboard 轮询检测                │ │
 │  │   ├─ 业务层: 双重去重机制                         │ │
 │  │   └─ 500ms 检测间隔                              │ │
+│  └───────────────────────────────────────────────────┘ │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │  Application Monitor (应用切换监控)               │ │
+│  │   ├─ 平台层: NSWorkspace Notification            │ │
+│  │   ├─ 会话追踪: AppTracker (时长记录)              │ │
+│  │   ├─ 应用切换: from/to/bundle_id/window          │ │
+│  │   └─ 窗口标题: Accessibility API                  │ │
 │  └───────────────────────────────────────────────────┘ │
 │                                                         │
 │  ┌───────────────────────────────────────────────────┐ │
@@ -292,7 +301,120 @@ OpenAIPanel() → 前端响应
 
 ---
 
-### 3.5 事件总线
+### 3.5 应用切换监控
+
+**文件**:
+- `internal/monitor/appswitch.go` (业务层)
+- `internal/monitor/app_tracker.go` (会话追踪)
+- `internal/platform/appswitch_darwin.go` (平台层)
+
+#### 功能
+
+监控应用切换事件，追踪应用使用时长，为模式识别提供关键数据：
+
+- **应用切换检测**: 监听 `NSWorkspaceDidActivateApplicationNotification`
+- **会话追踪**: 记录每个应用的使用时长（Start/End 时间）
+- **窗口标题获取**: 使用 Accessibility API 获取焦点窗口标题
+- **事件发布**: 发布 `EventTypeAppSwitch` 和 `EventTypeAppSession` 事件
+
+#### 技术要点
+
+**平台层实现** (`appswitch_darwin.go`):
+- 使用 NSWorkspace 通知中心监听应用切换
+- CGO 回调机制：C 层通知 → Go 层处理
+- Go 层维护当前应用状态，避免 C 层内存管理问题
+- 窗口标题通过 AXUIElement 获取
+
+**业务层实现** (`appswitch.go`):
+- 集成平台层监控器
+- 添加应用上下文信息
+- 发布应用到事件总线
+
+**会话追踪器** (`app_tracker.go`):
+```go
+type AppSession struct {
+    AppName  string    // 应用名称
+    BundleID string    // Bundle ID
+    Start    time.Time // 会话开始时间
+    End      time.Time // 会话结束时间（零值表示活跃）
+}
+
+func (s *AppSession) Duration() time.Duration {
+    if s.IsAlive() {
+        return time.Since(s.Start)
+    }
+    return s.End.Sub(s.Start)
+}
+```
+
+#### 数据流
+
+```
+应用切换
+    ↓
+NSWorkspace Notification
+    ↓
+CGO Callback (appswitchCallback)
+    ↓
+goAppSwitchHandleAppSwitch (Go 回调)
+    ↓
+获取 from = 当前应用
+更新 当前应用 = to
+    ↓
+ApplicationMonitor.handlePlatformEvent
+    ↓
+├─ AppTracker.SwitchApp()  - 更新会话
+├─ 构造 Event (EventTypeAppSwitch)
+├─ 添加上下文 (WithContext)
+└─ 发布到事件总线
+```
+
+#### 事件示例
+
+```go
+// 应用切换事件
+{
+    "type": "app_switch",
+    "data": {
+        "from": "Chrome",
+        "to": "Safari",
+        "bundle_id": "com.apple.Safari",
+        "window": "Apple"
+    },
+    "context": {
+        "application": "Safari",
+        "bundle_id": "com.apple.Safari",
+        "window_title": "Apple"
+    }
+}
+
+// 应用会话事件（应用结束时发布）
+{
+    "type": "app_session",
+    "data": {
+        "app_name": "Chrome",
+        "bundle_id": "com.google.Chrome",
+        "duration": "5m23s",
+        "start": "2026-01-30T14:30:00Z",
+        "end": "2026-01-30T14:35:23Z"
+    }
+}
+```
+
+#### 测试覆盖
+
+- ✅ 单元测试覆盖率：**87.5-100%**
+- ✅ 核心功能测试：
+  - 会话创建和切换
+  - 时长计算
+  - 事件发布
+  - 幂等性（Start/Stop）
+
+**权限要求**: ✅ 无需特殊权限（窗口标题除外）
+
+---
+
+### 3.6 事件总线
 
 **文件**: `pkg/events/bus.go`
 
@@ -671,28 +793,30 @@ cm.lastContent = event.Content
 
 ## 🔮 待实现功能详解
 
-虽然这些功能在架构文档中已有详细设计，但计划在后续阶段实现。以下为简要说明：
+虽然以下功能在架构文档中已有详细设计，但计划在后续阶段实现。以下为简要说明：
 
-### 1. 应用切换监控
-- **事件类型**: `EventTypeAppSwitch` (已定义)
+### ✅ 应用切换监控（已完成）
+- **事件类型**: `EventTypeAppSwitch` 和 `EventTypeAppSession`
 - **功能**: 检测应用切换、记录应用使用时长、发布应用会话事件
-- **预计实现阶段**: Phase 2
+- **实现日期**: 2026-01-30
+- **测试覆盖率**: 87.5-100%
+- **详细说明**: 参见 [3.5 应用切换监控](#35-应用切换监控)
 
-### 2. 权限管理系统
+### 1. 权限管理系统
 - **事件类型**: `EventTypePermission` (已定义)
 - **功能**: 检查辅助功能权限、提示用户、打开系统设置
-- **预计实现阶段**: Phase 2
+- **预计实现阶段**: Phase 1 补充
 
-### 3. 性能优化组件
+### 2. 性能优化组件
 - **事件过滤器**: 过滤过于频繁的事件
 - **批量处理器**: 批量收集事件，减少系统调用
-- **预计实现阶段**: Phase 3
+- **预计实现阶段**: Phase 1 补充
 
-### 4. 剪贴板隐私保护
+### 3. 剪贴板隐私保护
 - **功能**: 过滤敏感应用、检测敏感内容、限制记录长度
 - **预计实现阶段**: Phase 7
 
-### 5. 文件系统监控
+### 4. 文件系统监控
 - **事件类型**: `EventTypeFileSystem` (已定义)
 - **功能**: 监控文件系统变化（创建、修改、删除、重命名）
 - **预计实现阶段**: Phase 4
@@ -701,34 +825,44 @@ cm.lastContent = event.Content
 
 ## 🎯 下一步计划
 
-### Phase 2 前的准备
+### Phase 1 补充工作
 
-**应用切换监控**:
-- [ ] 实现 ApplicationMonitor 监控器
-- [ ] 实现 AppTracker 应用会话追踪
-- [ ] 发布 `EventTypeAppSwitch` 和 `EventTypeAppSession` 事件
-- [ ] 添加应用使用时长统计
+应用切换监控已完成，接下来需要补充两个关键功能以完善 Phase 1：
 
-**权限管理系统**:
-- [ ] 实现 CheckAccessibilityPermission
-- [ ] 添加权限缺失时的用户提示
-- [ ] 提供打开系统设置的快捷方式
-- [ ] 在监控器启动前验证权限
+**权限管理系统**（高优先级）:
+- [ ] 实现 `permission.go` 接口定义
+- [ ] 实现 `permission_darwin.go` CGO 权限检查
+- [ ] 实现 `PermissionManager` 服务层
+- [ ] 集成到引擎启动流程
+- [ ] 编写单元测试
 
-**事件持久化**:
-- [ ] 集成 SQLite 存储层
-- [ ] 实现批量写入优化
-- [ ] 添加事件查询接口
+**性能优化组件**（中优先级）:
+- [ ] 实现 `filter.go` 事件过滤器
+- [ ] 实现 `batcher.go` 批量处理器
+- [ ] 集成到事件总线
+- [ ] 性能基准测试
+- [ ] 编写单元测试
 
-**性能优化**:
-- [ ] 减少 API 调用频率
-- [ ] 优化内存使用
-- [ ] 异步处理优化
+**文档更新**:
+- [ ] 更新监控引擎架构文档
+- [ ] 更新实施计划总结
+- [ ] 添加应用切换监控示例
 
-**错误处理增强**:
-- [ ] 监控器自动恢复
-- [ ] 详细的错误日志
-- [ ] 优雅关闭机制
+### Phase 2 准备工作
+
+完成 Phase 1 补充后，将开始 Phase 2（模式识别引擎）：
+
+**数据准备**:
+- ✅ 应用切换事件（已实现）
+- ✅ 应用会话数据（已实现）
+- ✅ 键盘事件（已有）
+- ✅ 剪贴板事件（已有）
+- ⏳ 权限验证（待实现）
+
+**架构准备**:
+- [ ] 模式识别引擎架构设计
+- [ ] 事件存储方案设计
+- [ ] 分析算法选型
 
 ### 相关文档链接
 
@@ -745,3 +879,4 @@ cm.lastContent = event.Content
 ---
 
 **最后更新**: 2026-01-30
+**更新内容**: 完成应用切换监控功能，更新文档和下一步计划

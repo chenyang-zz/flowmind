@@ -21,6 +21,9 @@ type Engine struct {
 	// clipboard 剪贴板监控器实例
 	clipboard Monitor
 
+	// application 应用监控器实例
+	application Monitor
+
 	// eventBus 事件总线，用于发布和订阅事件
 	eventBus *events.EventBus
 
@@ -85,6 +88,20 @@ func (e *Engine) Start() error {
 		)
 	}
 
+	// 初始化并启动应用监控器
+	e.application = NewApplicationMonitor(e.eventBus)
+	if err := e.application.Start(); err != nil {
+		logger.Error("启动应用监控器失败",
+			zap.String("component", "engine"),
+			zap.Error(err),
+		)
+		// 应用监控器启动失败不影响引擎启动，只记录日志
+		logger.Warn("应用监控器启动失败，但引擎继续运行",
+			zap.String("component", "engine"),
+			zap.Error(err),
+		)
+	}
+
 	e.isRunning = true
 
 	logger.Info("监控引擎启动成功", zap.String("component", "engine"))
@@ -92,7 +109,7 @@ func (e *Engine) Start() error {
 	// 发布状态事件
 	statusEvent := events.NewEvent(events.EventTypeStatus, map[string]interface{}{
 		"status":   "started",
-		"monitors": []string{"keyboard", "clipboard"},
+		"monitors": []string{"keyboard", "clipboard", "application"},
 	})
 	e.eventBus.Publish(string(events.EventTypeStatus), *statusEvent)
 
@@ -116,6 +133,17 @@ func (e *Engine) Stop() error {
 	}
 
 	logger.Info("停止监控引擎", zap.String("component", "engine"))
+
+	// 停止应用监控器
+	if e.application != nil {
+		if err := e.application.Stop(); err != nil {
+			logger.Error("停止应用监控器失败",
+				zap.String("component", "engine"),
+				zap.Error(err),
+			)
+			// 继续停止其他监控器
+		}
+	}
 
 	// 停止剪贴板监控器
 	if e.clipboard != nil {
@@ -181,4 +209,14 @@ func (e *Engine) GetKeyboardMonitor() Monitor {
 // Returns: Monitor - 剪贴板监控器实例，可能为 nil
 func (e *Engine) GetClipboardMonitor() Monitor {
 	return e.clipboard
+}
+
+// GetApplicationMonitor 获取应用监控器实例
+//
+// 返回引擎管理的应用监控器实例，可用于直接访问应用监控器。
+// 注意：返回的实例可能为 nil（在引擎未启动时）。
+//
+// Returns: Monitor - 应用监控器实例，可能为 nil
+func (e *Engine) GetApplicationMonitor() Monitor {
+	return e.application
 }
