@@ -18,6 +18,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
 //go:embed all:frontend/dist
@@ -41,10 +42,10 @@ func main() {
 		Title: "FlowMind",
 
 		/** 应用窗口宽度（像素） */
-		Width: 1280,
+		Width: 600,
 
 		/** 应用窗口高度（像素） */
-		Height: 800,
+		Height: 600,
 
 		/** 窗口背景色 (白色) */
 		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 255},
@@ -107,6 +108,17 @@ func main() {
 			// 可以在这里提示用户保存未保存的工作
 			// return true // 取消关闭
 			return false // 允许关闭
+		},
+
+		/**
+		 * Mac 平台特定配置
+		 * 自定义 Mac 应用的标题栏外观
+		 */
+		Mac: &mac.Options{
+			TitleBar: &mac.TitleBar{
+				TitlebarAppearsTransparent: true,
+				HideTitle:                  true,
+			},
 		},
 	})
 

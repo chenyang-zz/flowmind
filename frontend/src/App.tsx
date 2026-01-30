@@ -1,120 +1,148 @@
 /**
  * FlowMind 主应用组件
  *
- * 这是应用的顶层组件，负责：
- * 1. 提供全局上下文
- * 2. 管理应用级状态
- * 3. 定义应用的基础布局
+ * 应用的顶层组件，负责：
+ * 1. 初始化主题和快捷键
+ * 2. 加载设置
+ * 3. 渲染全局组件（菜单栏、AI 助手面板）
  */
 
-import React from 'react';
-import { useAppStore } from './stores/appStore';
+import { useEffect } from "react";
+import { Brain } from "lucide-react";
+import { MenuBarIcon } from "./components/menubar/MenuBarIcon";
+import { AIAssistantPanel } from "./components/ai-assistant/AIAssistantPanel";
+import { useSettingsStore } from "./stores/settingsStore";
+import { useNavigationStore } from "./stores/navigationStore";
+import { initTheme } from "./lib/theme";
+import { initShortcuts } from "./lib/shortcuts";
+import { wails } from "./lib/wails";
+import { Settings } from "./pages/Settings";
 
 /**
- * 主应用组件
- *
- * @returns {JSX.Element} 应用界面
+ * 主页面组件
  */
-function App(): JSX.Element {
-  // 从 Zustand store 获取应用状态
-  const { isLoading } = useAppStore();
-
-  /**
-   * 渲染加载状态
-   */
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4" />
-          <p className="text-gray-600">加载中...</p>
-        </div>
-      </div>
-    );
-  }
-
-  /**
-   * 渲染主界面
-   */
+function MainPage() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* 页面头部 */}
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">FlowMind</h1>
-          <p className="text-gray-600 mt-2">AI 工作流智能体</p>
-        </header>
+    <div
+      className="
+        min-h-screen
+        flex items-center justify-center
+        bg-linear-to-br from-bg-primary to-bg-secondary
+      "
+    >
+      <div className="text-center space-y-6 px-8">
+        {/* Logo */}
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <div
+            className="
+              flex items-center justify-center
+              w-16 h-16
+              rounded-2xl
+              bg-indigo-500
+              shadow-2xl
+            "
+          >
+            <Brain size={36} className="text-white" />
+          </div>
+          <div className="text-left">
+            <h1 className="text-3xl font-bold text-white/90">FlowMind</h1>
+            <p className="text-sm text-white/45">AI 工作流智能体</p>
+          </div>
+        </div>
 
-        {/* 主内容区 */}
-        <main>
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold mb-4">欢迎使用 FlowMind</h2>
+        {/* 功能介绍 */}
+        <div className="max-w-md mx-auto space-y-4">
+          <p className="text-white/60 leading-relaxed">
+            FlowMind 是一个主动的 AI 工作流伴侣，通过监控学习你的工作模式，
+            主动发现问题并提供智能自动化建议。
+          </p>
 
-            {/* 应用介绍 */}
-            <p className="text-gray-700 mb-6">
-              FlowMind 是一个主动的 AI 工作流伴侣，通过监控学习你的工作模式，
-              主动发现问题并提供智能自动化建议。
-            </p>
-
-            {/* 功能卡片网格 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* 功能卡片：智能工作流发现 */}
-              <FeatureCard
-                icon="🧠"
-                title="智能工作流发现"
-                description="AI 自动识别重复性操作模式，主动建议自动化方案"
-              />
-
-              {/* 功能卡片：实时 AI 助手 */}
-              <FeatureCard
-                icon="💡"
-                title="实时 AI 助手"
-                description="全局快捷键唤起，AI 理解当前工作状态并提供帮助"
-              />
-
-              {/* 功能卡片：智能知识管理 */}
-              <FeatureCard
-                icon="📚"
-                title="智能知识管理"
-                description="AI 自动分类、打标签、建立知识图谱，智能推荐"
-              />
-
-              {/* 功能卡片：智能自动化 */}
-              <FeatureCard
-                icon="🤖"
-                title="智能自动化"
-                description="自然语言描述需求，AI 生成并执行自动化脚本"
-              />
+          {/* 快捷键提示 */}
+          <div
+            className="
+              glass-card
+              px-6 py-4
+              rounded-xl
+              text-left
+            "
+          >
+            <div className="text-xs text-white/35 mb-3">快捷键</div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-white/60">唤起 AI 助手</span>
+                <kbd className="px-2 py-1 text-xs bg-white/5 rounded text-white/45">
+                  ⌘⇧M
+                </kbd>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-white/60">打开仪表板</span>
+                <kbd className="px-2 py-1 text-xs bg-white/5 rounded text-white/45">
+                  ⌘⇧D
+                </kbd>
+              </div>
             </div>
           </div>
-        </main>
+
+          {/* 状态提示 */}
+          <div className="flex items-center justify-center gap-2 text-sm text-white/35">
+            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <span>监控运行中</span>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 /**
- * 功能卡片组件
- *
- * @param icon - 功能图标
- * @param title - 功能标题
- * @param description - 功能描述
- * @returns {JSX.Element} 功能卡片元素
+ * 主应用组件
  */
-interface FeatureCardProps {
-  icon: string;
-  title: string;
-  description: string;
-}
+function App() {
+  const { loadSettings, theme } = useSettingsStore();
+  const { currentPage } = useNavigationStore();
 
-function FeatureCard({ icon, title, description }: FeatureCardProps): JSX.Element {
+  // 初始化应用
+  useEffect(() => {
+    // 初始化主题
+    initTheme();
+
+    // 加载设置
+    loadSettings();
+
+    // 初始化快捷键系统
+    initShortcuts();
+
+    // 加载监控状态并设置应用上下文
+    const initApp = async () => {
+      try {
+        const isRunning = await wails.isMonitoringRunning();
+        console.log("监控运行状态:", isRunning);
+
+        // TODO: 实时获取当前应用上下文
+        // const context = await wails.getCurrentContext();
+        // useAIAssistantStore.getState().setCurrentContext(context);
+      } catch (error) {
+        console.error("初始化应用失败:", error);
+      }
+    };
+
+    initApp();
+  }, [loadSettings]);
+
   return (
-    <div className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200">
-      <h3 className="font-semibold mb-2 flex items-center">
-        <span className="text-2xl mr-2">{icon}</span>
-        {title}
-      </h3>
-      <p className="text-sm text-gray-600">{description}</p>
+    <div className={`min-h-screen ${theme}`}>
+      {/* 菜单栏图标 */}
+      <div className="fixed top-4 right-4 z-30">
+        <MenuBarIcon />
+      </div>
+
+      {/* AI 助手面板 */}
+      <AIAssistantPanel />
+
+      {/* 根据当前页面显示不同内容 */}
+      {currentPage === "main" && <MainPage />}
+      {currentPage === "settings" && <Settings />}
+      {/* TODO: 其他页面 (dashboard, automations, knowledge) */}
     </div>
   );
 }

@@ -7,7 +7,52 @@
 @import "tailwindcss";
 
 @theme {
-  /* 自定义颜色 */
+  /* ========== Linear 风格色彩系统（极简、专业）========== */
+
+  /* 深色主题（默认） - 更柔和的色调 */
+  --color-bg-primary: #09090b;
+  --color-bg-secondary: #0c0c0e;
+  --color-bg-tertiary: #111113;
+  --color-bg-elevated: #18181b;
+
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-default: rgba(255, 255, 255, 0.09);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+
+  --color-text-primary: rgba(255, 255, 255, 0.92);
+  --color-text-secondary: rgba(255, 255, 255, 0.56);
+  --color-text-tertiary: rgba(255, 255, 255, 0.38);
+
+  /* 更低调的强调色 */
+  --color-accent-primary: #6366f1;
+  --color-accent-hover: #818cf8;
+  --color-accent-active: #4f46e5;
+
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  /* 玻璃拟态效果变量 - 更细腻 */
+  --glass-bg: rgba(24, 24, 27, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: rgba(0, 0, 0, 0.25);
+  --glass-blur: 24px;
+
+  /* 浅色主题 */
+  --color-light-bg-primary: #ffffff;
+  --color-light-bg-secondary: #f7f7f8;
+  --color-light-bg-tertiary: #efeff0;
+  --color-light-bg-elevated: #ffffff;
+
+  --color-light-border-subtle: rgba(0, 0, 0, 0.06);
+  --color-light-border-default: rgba(0, 0, 0, 0.1);
+  --color-light-border-strong: rgba(0, 0, 0, 0.14);
+
+  --color-light-text-primary: rgba(0, 0, 0, 0.9);
+  --color-light-text-secondary: rgba(0, 0, 0, 0.65);
+  --color-light-text-tertiary: rgba(0, 0, 0, 0.45);
+
+  /* 自定义颜色（保持向后兼容） */
   --color-primary-50: #f0f9ff;
   --color-primary-100: #e0f2fe;
   --color-primary-200: #bae6fd;
@@ -24,6 +69,9 @@
   --animate-fade-out: fadeOut 0.2s ease-out;
   --animate-slide-up: slideUp 0.3s ease-out;
   --animate-slide-down: slideDown 0.3s ease-out;
+  --animate-scale-in: scaleIn 0.2s ease-out;
+  --animate-slide-in-right: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-slide-in-left: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 
   /* 关键帧定义 */
   @keyframes fadeIn {
@@ -57,6 +105,39 @@
       opacity: 1;
     }
   }
+
+  @keyframes scaleIn {
+    from {
+      transform: scale(0.95);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInRight {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInLeft {
+    from {
+      transform: translateX(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
 }
 
 /* ========== 全局基础样式 ========== */
@@ -73,6 +154,37 @@
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  /* 深色主题（默认） */
+  .dark {
+    --bg-primary: var(--color-bg-primary);
+    --bg-secondary: var(--color-bg-secondary);
+    --bg-tertiary: var(--color-bg-tertiary);
+    --bg-elevated: var(--color-bg-elevated);
+    --border-subtle: var(--color-border-subtle);
+    --border-default: var(--color-border-default);
+    --border-strong: var(--color-border-strong);
+    --text-primary: var(--color-text-primary);
+    --text-secondary: var(--color-text-secondary);
+    --text-tertiary: var(--color-text-tertiary);
+  }
+
+  /* 浅色主题 */
+  .light {
+    --bg-primary: var(--color-light-bg-primary);
+    --bg-secondary: var(--color-light-bg-secondary);
+    --bg-tertiary: var(--color-light-bg-tertiary);
+    --bg-elevated: var(--color-light-bg-elevated);
+    --border-subtle: var(--color-light-border-subtle);
+    --border-default: var(--color-light-border-default);
+    --border-strong: var(--color-light-border-strong);
+    --text-primary: var(--color-light-text-primary);
+    --text-secondary: var(--color-light-text-secondary);
+    --text-tertiary: var(--color-light-text-tertiary);
   }
 
   /**
@@ -117,4 +229,196 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ========== 玻璃拟态效果 ========== */
+
+/**
+ * 玻璃拟态基础效果
+ * 背景模糊 + 半透明 + 微妙边框
+ */
+@utility glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 var(--glass-shadow);
+}
+
+/**
+ * 玻璃拟态卡片效果
+ * 更柔和的阴影和边框
+ */
+@utility glass-card {
+  background: rgba(24, 24, 27, 0.5);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+
+/**
+ * 玻璃拟态面板效果
+ * 用于浮层面板、对话框等 - 更简洁
+ */
+@utility glass-panel {
+  background: rgba(17, 17, 19, 0.9);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+}
+
+/* ========== Linear 风格按钮 ========== */
+
+/**
+ * 主要按钮样式
+ * 纯色 + 微妙的阴影
+ */
+@utility btn-primary {
+  background: var(--color-accent-primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.btn-primary:hover {
+  background: var(--color-accent-hover);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.btn-primary:active {
+  background: var(--color-accent-active);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.15);
+}
+
+/**
+ * 次要按钮样式
+ * 更低调的设计
+ */
+@utility btn-secondary {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--color-border-strong);
+}
+
+.btn-secondary:active {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ========== 深色主题滚动条 ========== */
+
+/**
+ * 深色主题滚动条样式
+ */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/**
+ * 浅色主题滚动条样式
+ */
+.light ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.light ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* ========== 动画工具类 ========== */
+
+/**
+ * 悬停微交互
+ * 细腻的缩放效果
+ */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+
+/**
+ * 脉冲动画
+ * 用于强调元素
+ */
+.pulse-soft {
+  animation: pulseSoft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulseSoft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/**
+ * 旋转加载动画
+ */
+.animate-spin-slow {
+  animation: spin 3s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+html, body {
+  overscroll-behavior: none;
 }

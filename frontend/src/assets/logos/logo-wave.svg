@@ -1,0 +1,19 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 线条艺术 - 流动波形 -->
+  <rect width="256" height="256" rx="56" fill="#09090b"/>
+
+  <!-- 抽象流动线条 -->
+  <g stroke="url(#flow-gradient)" stroke-width="4" fill="none" stroke-linecap="round">
+    <path d="M72 128 Q106 96 128 128 T184 128" opacity="0.9"/>
+    <path d="M72 144 Q106 112 128 144 T184 144" opacity="0.6"/>
+    <path d="M72 160 Q106 128 128 160 T184 160" opacity="0.3"/>
+  </g>
+
+  <!-- 渐变定义 -->
+  <defs>
+    <linearGradient id="flow-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+</svg>

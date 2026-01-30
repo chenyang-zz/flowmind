@@ -1,0 +1,30 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="256" height="256" rx="56" fill="#09090b"/>
+
+  <!-- FM 字母组合 - 极简设计 -->
+  <g transform="translate(128, 128)">
+    <!-- F -->
+    <g fill="#6366f1">
+      <rect x="-45" y="-50" width="12" height="100" rx="2"/>
+      <rect x="-45" y="-50" width="50" height="12" rx="2"/>
+      <rect x="-45" y="-14" width="35" height="12" rx="2"/>
+    </g>
+
+    <!-- M -->
+    <g fill="#818cf8">
+      <rect x="10" y="-50" width="12" height="100" rx="2"/>
+      <rect x="48" y="-50" width="12" height="100" rx="2"/>
+      <polygon points="22,-50 22,0 35,-25 48,-50" opacity="0.8"/>
+    </g>
+
+    <!-- 连接线 - 融合感 -->
+    <line x1="-33" y1="0" x2="10" y2="0" stroke="#6366f1" stroke-width="2" opacity="0.5"/>
+  </g>
+
+  <!-- 角落装饰 -->
+  <rect x="40" y="40" width="8" height="8" rx="2" fill="#6366f1" opacity="0.3"/>
+  <rect x="208" y="40" width="8" height="8" rx="2" fill="#818cf8" opacity="0.3"/>
+  <rect x="40" y="208" width="8" height="8" rx="2" fill="#818cf8" opacity="0.3"/>
+  <rect x="208" y="208" width="8" height="8" rx="2" fill="#6366f1" opacity="0.3"/>
+</svg>
