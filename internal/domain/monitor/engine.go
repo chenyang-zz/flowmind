@@ -6,6 +6,8 @@ import (
 
 	"github.com/chenyang-zz/flowmind/pkg/events"
 	"github.com/chenyang-zz/flowmind/internal/infrastructure/logger"
+	"github.com/chenyang-zz/flowmind/internal/infrastructure/platform"
+	"github.com/chenyang-zz/flowmind/internal/services"
 	"go.uber.org/zap"
 )
 
@@ -63,6 +65,26 @@ func (e *Engine) Start() error {
 	}
 
 	logger.Info("启动监控引擎", zap.String("component", "engine"))
+
+	// 权限检查：在启动监控器前验证系统权限
+	logger.Info("检查系统权限", zap.String("component", "engine"))
+	permChecker := platform.NewPermissionChecker()
+	permManager := services.NewPermissionManager(permChecker, e.eventBus)
+
+	// 检查辅助功能权限（键盘监控需要）
+	if err := permManager.EnsurePermission(platform.PermissionAccessibility); err != nil {
+		logger.Error("辅助功能权限检查失败",
+			zap.String("component", "engine"),
+			zap.Error(err),
+		)
+
+		// 尝试打开系统设置，引导用户授权
+		_ = permManager.OpenSystemSettings(platform.PermissionAccessibility)
+
+		return fmt.Errorf("缺少辅助功能权限，监控器无法启动: %w", err)
+	}
+
+	logger.Info("权限检查通过", zap.String("component", "engine"))
 
 	// 初始化并启动键盘监控器
 	e.keyboard = NewKeyboardMonitor(e.eventBus)
