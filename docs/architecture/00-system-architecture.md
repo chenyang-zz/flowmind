@@ -13,6 +13,112 @@
 3. **事件驱动** - 异步通信，松耦合
 4. **依赖注入** - 便于测试和扩展
 5. **符合 Go 标准布局** - Standard Go Project Layout
+6. **渐进式架构** - 根据功能复杂度逐步引入分层
+
+---
+
+## 分层演进策略
+
+FlowMind 采用**渐进式分层架构**，根据功能复杂度逐步引入层次，避免过度设计。
+
+### Phase 1（当前阶段）
+
+**架构**：三层架构
+```
+Frontend → App → Domain → Infrastructure
+```
+
+**特点**：
+- ✅ App 层直接调用 Domain 层
+- ✅ 功能单一，无需额外的 Service 层
+- ✅ `monitor.Engine` 是监控领域的核心逻辑，管理监控器是领域内协调
+
+**示例**：
+```go
+// internal/app/app.go
+type App struct {
+    monitorEngine monitor.Monitor  // 直接使用 Domain 层
+}
+
+func (a *App) Startup() {
+    a.monitorEngine.Start()  // 直接调用
+}
+```
+
+**适用场景**：
+- 监控功能独立
+- 没有跨 Domain 的业务编排
+- 逻辑简单直接
+
+### Phase 2+（未来阶段）
+
+**架构**：完整四层架构
+```
+Frontend → App → Service → Domain → Infrastructure
+```
+
+**特点**：
+- ✅ 引入 Service 层协调多个 Domain
+- ✅ 处理复杂的业务流程
+- ✅ 实现应用级用例
+
+**示例**：
+```go
+// internal/services/analyzer_service.go
+type AnalyzerService struct {
+    monitor      monitor.Monitor      // 监控领域
+    patternMiner analyzer.PatternMiner // 分析领域
+    aiClient     ai.AIClient           // AI 领域
+    eventRepo    storage.EventRepository // 存储基础设施
+}
+
+func (s *AnalyzerService) AnalyzeEvents(ctx context.Context) error {
+    // 1. 从监控器获取事件
+    events := s.monitor.GetRecentEvents(ctx)
+
+    // 2. 模式识别
+    patterns, _ := s.patternMiner.MinePatterns(ctx, events)
+
+    // 3. AI 过滤
+    validPatterns, _ := s.aiClient.FilterPatterns(ctx, patterns)
+
+    // 4. 保存
+    s.eventRepo.Save(ctx, validPatterns)
+
+    return nil
+}
+```
+
+**引入时机**：
+- 需要协调多个 Domain（监控 + 分析 + AI）
+- 实现复杂的业务流程
+- 跨 Domain 的事务管理
+
+### 何时需要 Service 层
+
+**✅ 需要 Service 层**：
+- 协调 2+ 个 Domain 协作
+- 实现应用级用例（如"分析事件并生成自动化建议"）
+- 处理复杂的业务逻辑流程
+- 需要 Domain 之间的转换
+
+**❌ 不需要 Service 层**：
+- 简单的 CRUD 操作
+- 单一 Domain 的功能
+- 直接的数据转换
+- App 层可以直接处理的逻辑
+
+### 当前项目的实现策略
+
+**Phase 1（已完成）**：
+- ✅ `monitor.Engine` 作为 Domain 层核心组件
+- ✅ App 层直接使用 `monitor.Engine`
+- ✅ 功能清晰，职责明确
+
+**Phase 2（计划中）**：
+- 🔄 引入 `AnalyzerService` 协调监控 + 分析
+- 🔄 引入 `AutomationService` 协调 AI + 执行
+- 🔄 业务逻辑复杂化后，逐步完善 Service 层
 
 ---
 
@@ -40,12 +146,14 @@
 │  └────────────────────────────────────────────────────┘ │
 │                          ▼                              │
 │  ┌────────────────────────────────────────────────────┐ │
-│  │  服务层 (internal/services/)                        │ │
+│  │  服务层 (internal/services/) 🔄 Phase 2+            │ │
 │  │  - MonitorService (监控服务)                        │ │
 │  │  - AnalyzerService (分析服务)                       │ │
 │  │  - AIService (AI 服务)                              │ │
 │  │  - AutomationService (自动化服务)                   │ │
 │  │  - KnowledgeService (知识服务)                      │ │
+│  │                                                     │ │
+│  │  注：当前阶段 (Phase 1) App 直接调用 Domain        │ │
 │  └────────────────────────────────────────────────────┘ │
 │                          ▼                              │
 │  ┌────────────────────────────────────────────────────┐ │
@@ -123,10 +231,6 @@ flowmind/
 │   │   └── startup.go              # 初始化逻辑
 │   │
 │   ├── domain/                     # 领域层（核心业务）
-│   │   ├── events/                 # 领域事件
-│   │   │   ├── types.go
-│   │   │   └── bus.go
-│   │   │
 │   │   ├── monitor/                # 监控领域
 │   │   ├── analyzer/               # 分析领域
 │   │   ├── ai/                     # AI 领域
@@ -170,6 +274,9 @@ flowmind/
 │
 ├── pkg/                            # 公共库
 │   └── events/                     # 事件系统（可复用）
+│       ├── bus.go                  # 事件总线实现
+│       ├── event.go                # 事件类型定义
+│       └── bus_test.go             # 单元测试
 │
 ├── build/                          # 构建资源
 │   ├── appicon.png
@@ -202,7 +309,7 @@ import (
     "context"
     "github.com/chenyang-zz/internal/services"
     "github.com/chenyang-zz/internal/infrastructure/config"
-    "github.com/chenyang-zz/internal/domain/events"
+    "github.com/chenyang-zz/pkg/events"
 )
 
 type App struct {
@@ -373,6 +480,68 @@ func (w *DarwinWorkspace) GetActiveApp() (string, error) {
 - 实现 Domain 定义的接口
 - 隔离平台特定代码
 - 处理持久化和外部 API
+
+---
+
+### 5. 事件系统 (`pkg/events/`)
+
+**职责**：提供发布-订阅模式的事件总线，支持跨层通信
+
+```go
+// pkg/events/bus.go
+type EventBus struct {
+    subscribers map[string][]*Subscriber
+    mutex       sync.RWMutex
+    middleware  []Middleware
+}
+
+// Publish 发布事件
+func (bus *EventBus) Publish(eventType string, event Event) error {
+    // 应用中间件
+    // 获取订阅者
+    // 异步发送事件
+}
+
+// Subscribe 订阅事件
+func (bus *EventBus) Subscribe(eventType string, handler EventHandler) string {
+    // 创建订阅者
+    // 返回订阅者 ID
+}
+```
+
+**事件类型** (`pkg/events/event.go`):
+- `EventTypeKeyboard` - 键盘事件
+- `EventTypeClipboard` - 剪贴板事件
+- `EventTypeAppSwitch` - 应用切换事件
+- `EventTypeStatus` - 状态事件
+
+**核心功能**:
+- 发布-订阅模式
+- 通配符订阅 (`*` 订阅所有事件)
+- 异步事件处理（每个订阅者独立 goroutine）
+- 中间件支持（日志、恢复、限流）
+
+**使用示例**:
+```go
+// 创建事件总线
+eventBus := events.NewEventBus()
+
+// 订阅所有事件
+eventBus.Subscribe("*", func(event events.Event) error {
+    log.Printf("收到事件: %s", event.Type)
+    return nil
+})
+
+// 发布事件
+event := events.NewEvent(events.EventTypeKeyboard, data)
+eventBus.Publish(string(events.EventTypeKeyboard), event)
+```
+
+**设计原则**:
+- 事件类型和总线在同一包，便于使用
+- 作为可复用基础设施，可被其他项目使用
+- 支持事件过滤和一次性订阅
+- 提供优雅关闭机制
 
 ---
 
