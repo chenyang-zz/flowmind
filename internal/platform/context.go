@@ -66,3 +66,45 @@ type KeyboardMonitor interface {
 	// Returns: bool - 监控器是否正在运行
 	IsRunning() bool
 }
+
+// ClipboardEvent 剪贴板原始事件数据
+//
+// ClipboardEvent 封装了剪贴板事件的基本信息，包括内容和类型。
+type ClipboardEvent struct {
+	// Content 剪贴板内容
+	// 对于文本内容，这是字符串形式
+	Content string
+	// Type 内容类型
+	// 常见类型: "public.utf8-plain-text", "public.png", "public.file-url" 等
+	Type string
+	// Size 内容大小（字节）
+	Size int64
+}
+
+// ClipboardCallback 剪贴板事件回调函数类型
+//
+// 当检测到剪贴板内容变化时，监控器会调用此回调函数，将事件数据传递给调用者。
+// Parameters: event - 剪贴板事件数据，包含内容、类型和大小
+type ClipboardCallback func(ClipboardEvent)
+
+// ClipboardMonitor 剪贴板监控器接口
+//
+// ClipboardMonitor 定义了剪贴板内容变化监控的生命周期管理方法。
+// 监控器会定期检查剪贴板内容，当检测到变化时触发回调函数。
+// 注意：在 macOS 上不需要特殊权限即可访问剪贴板。
+type ClipboardMonitor interface {
+	// Start 启动剪贴板监控
+	// 启动后会定期检查剪贴板内容变化并通过回调函数通知
+	// Parameters: callback - 剪贴板事件回调函数
+	// Returns: error - 启动失败时返回错误（如已运行等）
+	Start(callback ClipboardCallback) error
+
+	// Stop 停止剪贴板监控
+	// 停止后会释放系统资源并取消定时检查
+	// Returns: error - 停止失败时返回错误（如未运行等）
+	Stop() error
+
+	// IsRunning 检查运行状态
+	// Returns: bool - 监控器是否正在运行
+	IsRunning() bool
+}

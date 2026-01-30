@@ -18,6 +18,9 @@ type Engine struct {
 	// keyboard 键盘监控器实例
 	keyboard Monitor
 
+	// clipboard 剪贴板监控器实例
+	clipboard Monitor
+
 	// eventBus 事件总线，用于发布和订阅事件
 	eventBus *events.EventBus
 
@@ -58,16 +61,28 @@ func (e *Engine) Start() error {
 
 	logger.Info("启动监控引擎", zap.String("component", "engine"))
 
-	// 初始化键盘监控器
+	// 初始化并启动键盘监控器
 	e.keyboard = NewKeyboardMonitor(e.eventBus)
-
-	// 启动键盘监控器
 	if err := e.keyboard.Start(); err != nil {
 		logger.Error("启动键盘监控器失败",
 			zap.String("component", "engine"),
 			zap.Error(err),
 		)
 		return fmt.Errorf("failed to start keyboard monitor: %w", err)
+	}
+
+	// 初始化并启动剪贴板监控器
+	e.clipboard = NewClipboardMonitor(e.eventBus)
+	if err := e.clipboard.Start(); err != nil {
+		logger.Error("启动剪贴板监控器失败",
+			zap.String("component", "engine"),
+			zap.Error(err),
+		)
+		// 剪贴板监控器启动失败不影响引擎启动，只记录日志
+		logger.Warn("剪贴板监控器启动失败，但引擎继续运行",
+			zap.String("component", "engine"),
+			zap.Error(err),
+		)
 	}
 
 	e.isRunning = true
@@ -77,7 +92,7 @@ func (e *Engine) Start() error {
 	// 发布状态事件
 	statusEvent := events.NewEvent(events.EventTypeStatus, map[string]interface{}{
 		"status":   "started",
-		"monitors": []string{"keyboard"},
+		"monitors": []string{"keyboard", "clipboard"},
 	})
 	e.eventBus.Publish(string(events.EventTypeStatus), *statusEvent)
 
@@ -101,6 +116,17 @@ func (e *Engine) Stop() error {
 	}
 
 	logger.Info("停止监控引擎", zap.String("component", "engine"))
+
+	// 停止剪贴板监控器
+	if e.clipboard != nil {
+		if err := e.clipboard.Stop(); err != nil {
+			logger.Error("停止剪贴板监控器失败",
+				zap.String("component", "engine"),
+				zap.Error(err),
+			)
+			// 继续停止其他监控器
+		}
+	}
 
 	// 停止键盘监控器
 	if e.keyboard != nil {
@@ -145,4 +171,14 @@ func (e *Engine) IsRunning() bool {
 // Returns: Monitor - 键盘监控器实例，可能为 nil
 func (e *Engine) GetKeyboardMonitor() Monitor {
 	return e.keyboard
+}
+
+// GetClipboardMonitor 获取剪贴板监控器实例
+//
+// 返回引擎管理的剪贴板监控器实例，可用于直接访问剪贴板监控器。
+// 注意：返回的实例可能为 nil（在引擎未启动时）。
+//
+// Returns: Monitor - 剪贴板监控器实例，可能为 nil
+func (e *Engine) GetClipboardMonitor() Monitor {
+	return e.clipboard
 }
