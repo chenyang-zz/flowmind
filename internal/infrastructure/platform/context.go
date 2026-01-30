@@ -108,3 +108,50 @@ type ClipboardMonitor interface {
 	// Returns: bool - 监控器是否正在运行
 	IsRunning() bool
 }
+
+// AppSwitchEvent 应用切换原始事件数据
+//
+// AppSwitchEvent 封装了应用切换事件的基本信息，包括切换前后的应用名称、
+// Bundle ID 和窗口标题等。
+type AppSwitchEvent struct {
+	// From 切换前的应用名称
+	// 如 "Chrome"、"Safari" 等，可能为空
+	From string
+	// To 切换后的应用名称
+	// 如 "Finder"、"Terminal" 等
+	To string
+	// BundleID 新应用的 Bundle ID
+	// 格式如 "com.apple.Finder"、"com.apple.Terminal" 等
+	BundleID string
+	// Window 新应用的窗口标题
+	// 当前焦点窗口的标题，可能为空
+	Window string
+}
+
+// AppSwitchCallback 应用切换事件回调函数类型
+//
+// 当检测到应用切换时，监控器会调用此回调函数，将事件数据传递给调用者。
+// Parameters: event - 应用切换事件数据
+type AppSwitchCallback func(AppSwitchEvent)
+
+// AppSwitchMonitor 应用切换监控器接口
+//
+// AppSwitchMonitor 定义了应用切换监控的生命周期管理方法。
+// 监控器通过监听系统通知来检测应用切换事件。
+// 注意：在 macOS 上不需要特殊权限。
+type AppSwitchMonitor interface {
+	// Start 启动应用切换监控
+	// 启动后会持续监听应用切换事件并通过回调函数通知
+	// Parameters: callback - 应用切换事件回调函数
+	// Returns: error - 启动失败时返回错误（如已运行等）
+	Start(callback AppSwitchCallback) error
+
+	// Stop 停止应用切换监控
+	// 停止后会释放系统资源并取消事件监听
+	// Returns: error - 停止失败时返回错误（如未运行等）
+	Stop() error
+
+	// IsRunning 检查运行状态
+	// Returns: bool - 监控器是否正在运行
+	IsRunning() bool
+}

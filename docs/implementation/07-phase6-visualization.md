@@ -34,5 +34,14 @@ AI 洞察生成
 ---
 
 **相关文档**：
-- [系统架构](../architecture/01-system-architecture.md)
-- [开发环境搭建](./01-development-setup.md)
+
+**前置文档**（上下阶段）:
+- [系统架构总览](../architecture/00-system-architecture.md) - 理解整体架构
+- [Phase 5: 自动化](./06-phase5-automation.md) - 实现自动化引擎
+- [开发环境搭建](./01-development-setup.md) - 配置开发环境
+
+**本阶段相关架构**:
+- [分析引擎详解](../architecture/03-analyzer-engine.md) - 数据分析和模式识别
+
+**后续阶段**（下阶段）:
+- [Phase 7: 隐私保护](./07-phase7-privacy-protection.md) - 实现隐私保护机制

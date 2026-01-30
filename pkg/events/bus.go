@@ -604,3 +604,74 @@ func (rl *rateLimiter) allow() bool {
 
 	return false
 }
+
+/**
+ * NewEventBusWithOptimization 创建带性能优化的事件总线
+ *
+ * 创建一个带事件过滤和批量处理功能的事件总线。
+ * 适用于高频事件场景，能够有效防止事件风暴。
+ *
+ * Parameters:
+ *   - opts: 配置选项（可选）
+ *
+ * Returns:
+ *   - *EventBus: 新创建的优化事件总线
+ *
+ * Example:
+ *   bus := NewEventBusWithOptimization(
+ *       WithAsyncBufferSize(2000),
+ *   )
+ */
+func NewEventBusWithOptimization(opts ...Option) *EventBus {
+	bus := NewEventBus(opts...)
+
+	// 创建事件过滤器
+	filter := NewEventFilterManager()
+
+	// 配置默认过滤规则
+	defaultRules := map[EventType]*FilterRule{
+		EventTypeKeyboard: {
+			MinInterval:  50 * time.Millisecond, // 键盘事件最小间隔50ms
+			MaxPerSecond: 20,                   // 每秒最多20个键盘事件
+		},
+		EventTypeClipboard: {
+			MinInterval:  100 * time.Millisecond, // 剪贴板事件最小间隔100ms
+			MaxPerSecond: 10,                    // 每秒最多10个剪贴板事件
+		},
+		EventTypeAppSwitch: {
+			MinInterval:  200 * time.Millisecond, // 应用切换事件最小间隔200ms
+			MaxPerSecond: 5,                     // 每秒最多5个应用切换事件
+		},
+	}
+	filter.SetRules(defaultRules)
+
+	// 创建批量处理器
+	batcher := NewEventBatcher(
+		10,              // 批次大小：10个事件
+		100*time.Millisecond, // 超时：100ms
+	)
+	batcher.Start()
+
+	// 添加过滤中间件
+	bus.Use(func(next EventHandler) EventHandler {
+		return func(event Event) error {
+			// 检查事件是否应该通过过滤器
+			if !filter.ShouldPass(event.Type) {
+				logger.Debug("事件被过滤",
+					zap.String("event_type", string(event.Type)),
+					zap.String("event_id", event.ID),
+				)
+				return nil // 跳过此事件
+			}
+			return next(event)
+		}
+	})
+
+	logger.Info("创建优化事件总线",
+		zap.Int("filter_rules", len(defaultRules)),
+		zap.Int("batch_size", 10),
+		zap.Duration("batch_timeout", 100*time.Millisecond),
+	)
+
+	return bus
+}

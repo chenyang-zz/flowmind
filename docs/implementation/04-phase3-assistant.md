@@ -34,5 +34,14 @@ Claude API 流式对话
 ---
 
 **相关文档**：
-- [系统架构](../architecture/01-system-architecture.md)
-- [开发环境搭建](./01-development-setup.md)
+
+**前置文档**（上下阶段）:
+- [系统架构总览](../architecture/00-system-architecture.md) - 理解整体架构
+- [Phase 2: 模式识别](./03-phase2-patterns.md) - 实现模式挖掘和分析
+- [开发环境搭建](./01-development-setup.md) - 配置开发环境
+
+**本阶段详细架构**:
+- [AI 服务详解](../architecture/04-ai-service.md) - Claude/Ollama 集成和提示词工程
+
+**后续阶段**（下阶段）:
+- [Phase 4: 知识管理](./05-phase4-knowledge.md) - 实现剪藏和知识图谱
