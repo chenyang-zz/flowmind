@@ -37,37 +37,35 @@ Frontend UI
 
 ## 🚀 实施步骤
 
-### Step 1: 添加依赖 (1 天) ✅ **已完成** (2026-01-30)
+### Step 1: 添加依赖 (1 天)
 
 **任务清单**:
-- [x] 更新 `go.mod` 添加依赖:
+- [ ] 更新 `go.mod` 添加依赖:
   ```bash
   go get github.com/mattn/go-sqlite3
   go get go.etcd.io/bbolt
+  go get github.com/philippgille/chromem-go
   go mod tidy
   ```
-- [x] 验证依赖安装: `go build ./...`
+- [ ] 验证依赖安装: `go build ./...`
 
 **验证标准**:
-- [x] 所有依赖安装成功
-- [x] 项目可以正常编译
-
-**相关提交**: 无（直接在feature分支完成）
+- 所有依赖安装成功
+- 项目可以正常编译
 
 ---
 
-### Step 2: 实现存储层 (3-4 天) ✅ **已完成** (2026-01-30)
+### Step 2: 实现存储层 (3-4 天)
 
-#### Day 1: SQLite 基础设施 ✅
+#### Day 1: SQLite 基础设施
 
 **文件结构**:
 ```
-internal/infrastructure/storage/
+internal/storage/
 ├── sqlite.go                  # SQLite 连接管理
-├── sqlite_test.go             # 单元测试
 ├── migrations.go              # 迁移执行器
 └── migrations/
-    └── 001_init.sql           # events 表（内嵌）
+    └── 001_init.sql           # events 表
 ```
 
 **关键功能**:
@@ -78,110 +76,89 @@ internal/infrastructure/storage/
 **详细实现**: 参见 [存储层架构文档](../architecture/06-storage-layer.md)
 
 **验证标准**:
-- [x] 数据库连接成功
-- [x] 迁移执行成功
-- [x] events 表创建成功
-- [x] 单元测试通过（13个测试用例）
-
-**相关提交**: `6c81f2f feat(storage): 实现 SQLite 基础设施和数据库迁移系统`
+- [ ] 数据库连接成功
+- [ ] 迁移执行成功
+- [ ] events 表创建成功
+- [ ] 单元测试通过
 
 ---
 
-#### Day 2: EventRepository ✅
+#### Day 2: EventRepository
 
 **文件结构**:
 ```
-internal/infrastructure/storage/
-├── event_repository.go        # 事件仓储接口
-└── event_repository_test.go   # 单元测试
+internal/storage/
+└── event_repository.go        # 事件仓储接口
 ```
 
 **核心接口**:
-- `Save()` - 保存单个事件 ✅
-- `SaveBatch()` - 批量保存（性能优化） ✅
-- `FindByTimeRange()` - 按时间范围查询 ✅
-- `FindRecent()` - 查询最近的事件 ✅
-- `FindByType()` - 按类型查询 ✅
-- `DeleteOlderThan()` - 删除旧数据 ✅
-- `GetStats()` - 获取统计信息 ✅
+- `Save()` - 保存单个事件
+- `SaveBatch()` - 批量保存（性能优化）
+- `FindByTimeRange()` - 按时间范围查询
+- `FindRecent()` - 查询最近的事件
+- `FindByType()` - 按类型查询
+- `DeleteOlderThan()` - 删除旧数据
+- `GetStats()` - 获取统计信息
 
 **性能优化**: 使用事务和预处理语句优化批量写入
 
 **详细实现**: 参见 [存储层架构文档](../architecture/06-storage-layer.md)
 
 **验证标准**:
-- [x] 所有接口实现完成
-- [x] 单元测试覆盖率 77.6%
-- [x] 批量写入性能 > 1000 events/sec
-
-**相关提交**: `d2b7c1a feat(storage): 实现 EventRepository 事件仓储接口`
+- [ ] 所有接口实现完成
+- [ ] 单元测试覆盖率 ≥ 90%
+- [ ] 批量写入性能 > 1000 events/sec
 
 ---
 
-#### Day 3: 迁移脚本 ✅
+#### Day 3: 迁移脚本
 
 **文件结构**:
 ```
-internal/infrastructure/storage/
-└── migrations.go              # 迁移脚本内嵌
+internal/storage/migrations/
+├── 002_add_sessions.sql       # sessions 表
+├── 003_add_patterns.sql       # patterns 表
+├── 004_add_automations.sql    # automations 表
+├── 005_add_ai_cache.sql       # AI 缓存表
+└── 006_schema_migrations.sql  # 迁移记录表
 ```
-
-**迁移脚本（内嵌在 migrations.go 中）**:
-- 001: schema_migrations 表（迁移记录）
-- 002: events 表（事件存储）
-- 003: sessions 表（会话存储）
-- 004: patterns 表（模式存储）
 
 **表结构**: sessions、patterns、automations、AI 缓存等
 
 **详细实现**: 参见 [数据库设计文档](../design/01-database-design.md)
 
-**验证标准**:
-- [x] 所有迁移执行成功
-- [x] 迁移幂等性测试通过
-- [x] 支持增量迁移
-
-**相关提交**: 包含在 SQLite 基础设施提交中
-
 ---
 
-#### Day 4: 性能优化 ✅
+#### Day 4: 性能优化
 
 **文件结构**:
 ```
-internal/infrastructure/storage/
-├── batch_writer.go            # 批量写入器
-└── batch_writer_test.go       # 单元测试
+internal/storage/
+└── batch_writer.go            # 批量写入器
 ```
 
 **核心功能**:
-- 批量收集事件（100 条一批）✅
-- 定时刷新机制（5 秒）✅
-- 异步写入优化 ✅
-- 并发安全 ✅
+- 批量收集事件（100 条一批）
+- 定时刷新机制（5 秒）
+- 异步写入优化
 
 **详细实现**: 参见 [存储层架构文档](../architecture/06-storage-layer.md)
 
 **验证标准**:
-- [x] 批量写入性能达标
-- [x] 内存使用合理
-- [x] 压力测试通过 (1000 events/sec)
-- [x] 测试覆盖率 98.9%
-
-**相关提交**: `4f8e3a1 feat(storage): 实现 BatchWriter 批量写入器`
+- [ ] 批量写入性能达标
+- [ ] 内存使用合理
+- [ ] 压力测试通过 (1000 events/sec)
 
 ---
 
-### Step 3: 集成存储层到 Monitor Engine (1 天) ⏸️ **暂时跳过**
-
-**说明**: 此步骤需要修改主项目的 Monitor Engine，当前在 pattern-recognition 分支独立开发。待后续合并到主分支时完成。
+### Step 3: 集成存储层到 Monitor Engine (1 天)
 
 **修改文件**: `internal/monitor/engine.go`
 
 **关键改动**:
-- [ ] 添加 `eventRepo` 和 `batchWriter` 字段
-- [ ] 在 Start() 方法中订阅所有事件并持久化
-- [ ] 使用批量写入器优化性能
+- 添加 `eventRepo` 和 `batchWriter` 字段
+- 在 Start() 方法中订阅所有事件并持久化
+- 使用批量写入器优化性能
 
 **详细实现**: 参见 [监控引擎架构文档](../architecture/02-monitor-engine.md)
 
@@ -190,175 +167,122 @@ internal/infrastructure/storage/
 - [ ] 可以查询保存的事件
 - [ ] 性能无明显影响
 
-**计划完成时间**: 合并到 main 分支时
-
 ---
 
-### Step 4: 实现 SessionDivider (2 天) ✅ **已完成** (2026-01-30)
+### Step 4: 实现 SessionDivider (2 天)
 
 **文件结构**:
 ```
-internal/domain/
-├── models/
-│   ├── models.go              # Session、Pattern 等领域模型
-│   └── models_test.go         # 模型单元测试
-└── analyzer/
-    ├── session.go             # 会话划分逻辑
-    └── session_test.go        # 单元测试
+internal/analyzer/
+├── types.go                   # 共享类型定义
+└── session.go                 # 会话划分逻辑
 ```
 
 **核心功能**:
-- `Session` - 会话定义（ID、时间、应用、事件列表） ✅
-- `SessionDivider` - 会话划分器接口 ✅
-- `TimeBasedDivider` - 基于时间的划分实现 ✅
-- `SessionStats` - 会话统计信息 ✅
+- `Session` - 会话定义（ID、时间、应用、事件列表）
+- `SessionDivider` - 会话划分器接口
+- `TimeBasedDivider` - 基于时间的划分实现
 
 **划分策略**:
-- 超时检测（10 分钟无操作） ✅
-- 应用切换检测（可选） ✅
-- 最小事件数过滤（默认5个） ✅
+- 超时检测（10 分钟无操作）
+- 应用切换检测（可选）
 
 **详细实现**: 参见 [分析引擎架构文档](../architecture/03-analyzer-engine.md)
 
 **验证标准**:
-- [x] 正确划分会话
-- [x] 超时检测准确
-- [x] 单元测试通过（10个测试用例）
-- [x] 测试覆盖率 100%
-
-**相关提交**:
-- `a7b3c2d feat(domain): 实现领域模型（Session、Pattern、EventStep）`
-- `ba60d3b feat(analyzer): 实现 SessionDivider 会话划分器`
+- [ ] 正确划分会话
+- [ ] 超时检测准确
+- [ ] 单元测试通过
 
 ---
 
-### Step 5: 实现 PatternMiner (3-4 天) ✅ **已完成** (2026-01-30)
+### Step 5: 实现 PatternMiner (3-4 天)
 
 **文件结构**:
 ```
-internal/domain/analyzer/
-├── normalizer.go              # 事件标准化 ✅
-├── normalizer_test.go         # 标准化测试 ✅
-├── prefixspan.go              # PrefixSpan 算法 ✅
-├── prefixspan_test.go         # 算法测试 ✅
-├── pattern_miner.go           # 模式挖掘器 ✅
-└── pattern_miner_test.go      # 挖掘器测试 ✅
+internal/analyzer/
+├── normalizer.go              # 事件标准化
+├── prefixspan.go              # PrefixSpan 算法
+└── pattern_miner.go           # 模式挖掘器
 ```
 
-#### Day 1: 事件标准化 ✅ **已完成** (2026-01-30)
+#### Day 1: 事件标准化
 
 **功能**:
-- 将原始事件转换为抽象的 EventStep ✅
-- 提取关键特征（按键类型、应用等） ✅
-- 支持键盘、剪贴板、应用切换、文件系统事件 ✅
-- 内容类型智能识别 ✅
+- 将原始事件转换为抽象的 EventStep
+- 提取关键特征（按键类型、应用等）
 
-**验证标准**:
-- [x] 所有事件类型支持
-- [x] 测试覆盖率 95.1%
-- [x] 13个测试用例全部通过
-
-**相关提交**: `a700ec9 feat(analyzer): 实现 EventNormalizer 事件标准化器`
-
-#### Day 2: PrefixSpan 算法 ✅ **已完成** (2026-01-30)
+#### Day 2: PrefixSpan 算法
 
 **核心算法**:
-- [x] 递归挖掘频繁序列模式
-- [x] 投影数据库优化
-- [x] 支持度计算和剪枝
-- [x] 模式长度限制
-- [x] 并行挖掘支持
+- 递归挖掘频繁序列模式
+- 投影数据库优化
+- 支持度计算和剪枝
+
+**详细实现**: 参见 [分析引擎架构文档](../architecture/03-analyzer-engine.md)
 
 **验证标准**:
-- [x] 算法正确性验证
-- [x] 测试用例通过（12个测试用例）
-- [x] 测试覆盖率 57.8%
-
-**相关提交**: `b530dd2 feat(analyzer): 实现PrefixSpan模式挖掘算法`
-
-#### Day 3-4: PatternMiner 整合 ✅ **已完成** (2026-01-30)
-
-**功能**:
-- [x] 整合标准化器和 PrefixSpan
-- [x] 实现模式置信度计算
-- [x] 实现模式频率统计
-- [x] 实现模式丰富功能（描述、统计）
-- [x] 实现多种过滤器（支持度、置信度、长度、未分析）
-- [x] 实现挖掘统计功能
-- [x] 实现模式摘要生成
-
-**验证标准**:
-- [x] 所有接口实现完成
-- [x] 测试覆盖率 51.8%
-- [x] 13个测试用例全部通过
-
-**相关提交**:
-- `da94495 feat(analyzer): 实现PatternMiner模式挖掘器整合`
-- `4a2b8c1 feat(domain): 添加Pattern.Description字段`
+- [ ] 算法正确性验证
+- [ ] 测试用例通过
+- [ ] 性能基准测试
 
 ---
 
-### Step 6: 实现 AI Service (2-3 天) ⏳ **待开始** (预计 2026-02-01)
+### Step 6: 实现 AI Service (2-3 天)
 
 **文件结构**:
 ```
-internal/infrastructure/ai/
-├── claude_client.go           # Claude API 客户端 ⏳
-├── claude_client_test.go      # 客户端测试 ⏳
-├── pattern_filter.go          # 模式过滤 ⏳
-├── pattern_filter_test.go     # 过滤测试 ⏳
-└── prompts.go                 # 提示词模板 ⏳
+internal/ai/
+├── claude_client.go           # Claude API 客户端
+├── pattern_filter.go          # 模式过滤
+└── prompts.go                 # 提示词模板
 ```
 
-#### Day 1: Claude 客户端 ⏳
+#### Day 1: Claude 客户端
 
 **核心功能**:
-- [ ] Claude API 调用封装
-- [ ] 重试机制和错误处理
-- [ ] 请求/响应模型定义
-- [ ] 超时控制
+- Claude API 调用封装
+- 重试机制和错误处理
+- 请求/响应模型定义
 
-#### Day 2: 提示词模板 ⏳
-
-**功能**:
-- [ ] 模式分析提示词生成
-- [ ] AI 响应解析
-- [ ] 时间节省估算
-- [ ] 复杂度评估
-
-#### Day 3: 模式过滤 ⏳
+#### Day 2: 提示词模板
 
 **功能**:
-- [ ] `AIPatternFilter` - AI 模式过滤器接口
-- [ ] `ShouldAutomate()` - 判断模式是否值得自动化
-- [ ] 缓存机制和限流控制
-- [ ] BBolt 本地缓存
+- 模式分析提示词生成
+- AI 响应解析
+- 时间节省估算
+
+#### Day 3: 模式过滤
+
+**功能**:
+- `AIPatternFilter` - AI 模式过滤器接口
+- `ShouldAutomate()` - 判断模式是否值得自动化
+- 缓存机制和限流控制
 
 **详细实现**: 参见 [AI 服务架构文档](../architecture/04-ai-service.md)
 
 ---
 
-### Step 7: 实现 Analyzer Engine 主引擎 (2 天) ⏳ **待开始** (预计 2026-02-03)
+### Step 7: 实现 Analyzer Engine 主引擎 (2 天)
 
 **文件结构**:
 ```
-internal/domain/analyzer/
-├── engine.go                  # 主引擎 ⏳
-├── engine_test.go             # 引擎集成测试 ⏳
-└── config.go                  # 配置管理 ⏳
+internal/analyzer/
+├── engine.go                  # 主引擎
+└── config.go                  # 配置管理
 ```
 
 **核心组件**:
-- [ ] `Engine` - 分析引擎主类
-- [ ] 事件处理循环
-- [ ] 模式挖掘循环
-- [ ] AI 过滤循环
+- `Engine` - 分析引擎主类
+- 事件处理循环
+- 模式挖掘循环
+- AI 过滤循环
 
 **工作流程**:
-1. [ ] 订阅监控事件并持久化
-2. [ ] 定时挖掘模式（可配置间隔）
-3. [ ] 使用 AI 过滤模式
-4. [ ] 生成自动化建议
+1. 订阅监控事件并持久化
+2. 定时挖掘模式（可配置间隔）
+3. 使用 AI 过滤模式
+4. 生成自动化建议
 
 **详细实现**: 参见 [分析引擎架构文档](../architecture/03-analyzer-engine.md)
 
@@ -373,50 +297,23 @@ internal/domain/analyzer/
 ## ✅ 验证标准
 
 ### 功能验证
-- [x] 能记录用户所有关键操作（存储层已完成）
+- [ ] 能记录用户所有关键操作
 - [ ] 能检测到用户重复操作（如启动开发环境）
 - [ ] AI 正确判断哪些模式值得自动化
 - [ ] UI 显示自动化建议列表
 - [ ] 用户可以接受/拒绝建议
 
 ### 性能验证
-- [x] 事件持久化: >1000 events/sec ✅ 已达标
+- [ ] 事件持久化: >1000 events/sec
 - [ ] 模式挖掘: <5s 处理 1000 事件
 - [ ] 内存占用: <100MB
 - [ ] CPU 使用: <10% (空闲时)
 
 ### 质量验证
-- [x] 单元测试覆盖率 ≥80% ✅ 当前 79.5%（接近目标）
-- [x] 核心模块覆盖率 ≥90% ✅ BatchWriter 98.9%, EventNormalizer 95.1%, SessionDivider 100%
-- [x] 所有中文注释完整 ✅ 已完成
+- [ ] 单元测试覆盖率 ≥80%
+- [ ] 核心模块覆盖率 ≥90%
+- [ ] 所有中文注释完整
 - [ ] 文档完整
-
----
-
-## 📊 进度总览
-
-### 已完成 (6/14 步骤, **71%**))
-
-1. ✅ **Step 1**: 添加依赖 (2026-01-30)
-2. ✅ **Step 2**: 实现存储层 (2026-01-30)
-   - SQLite 基础设施
-   - EventRepository (覆盖率 77.6%)
-   - BatchWriter (覆盖率 98.9%)
-   - 迁移系统
-3. ⏸️ **Step 3**: 集成存储层到 Monitor Engine (暂时跳过)
-4. ✅ **Step 4**: 实现 SessionDivider (2026-01-30)
-   - 领域模型
-   - 会话划分逻辑 (覆盖率 100%)
-5. ✅ **Step 5**: 实现 PatternMiner (2026-01-30) ⬅️ **刚完成**
-   - ✅ EventNormalizer (覆盖率 95.1%)
-   - ✅ PrefixSpan 算法 (覆盖率 57.8%)
-   - ✅ PatternMiner 整合 (覆盖率 51.8%)
-
-### 待完成 (8/14 步骤, **29%**)
-
-6. ⏳ **Step 6**: 实现 AI Service (预计 2026-02-01)
-7. ⏳ **Step 7**: 实现 Analyzer Engine (预计 2026-02-03)
-8. ⏳ **Step 8-11**: 前端集成、测试、部署 (待开始)
 
 ---
 
@@ -426,21 +323,6 @@ internal/domain/analyzer/
 2. **性能**: 分析 1 天数据 <5 秒
 3. **实用性**: AI 建议的自动化接受率 >70%
 4. **稳定性**: 连续运行 7 天无崩溃
-
----
-
-## 📝 开发日志
-
-### 2026-01-30
-- ✅ 完成存储层实现（SQLite、EventRepository、BatchWriter）
-- ✅ 完成领域模型定义（Session、Pattern、EventStep）
-- ✅ 完成 SessionDivider 实现（测试覆盖率 100%）
-- ✅ 完成 EventNormalizer 实现（测试覆盖率 95.1%）
-- ✅ 完成 PrefixSpan 算法实现（测试覆盖率 57.8%，12个测试用例）
-- ✅ 完成 PatternMiner 整合（测试覆盖率 51.8%，13个测试用例）
-- 📊 **模式挖掘工作流已打通**：事件 → 标准化 → PrefixSpan → PatternMiner → 过滤输出
-- 📊 整体测试覆盖率: 79.5%（目标 80%）
-- 🎯 **阶段2进度: 71% 完成**
 
 ---
 
@@ -464,4 +346,4 @@ internal/domain/analyzer/
 
 ---
 
-**最后更新**: 2026-01-30 (已完成 **71%**)
+**最后更新**: 2026-01-30
