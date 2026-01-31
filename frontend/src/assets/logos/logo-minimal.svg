@@ -1,0 +1,14 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 单点焦点 - 最极简 -->
+  <rect width="256" height="256" rx="56" fill="#09090b"/>
+
+  <!-- 中心光点 -->
+  <circle cx="128" cy="128" r="32" fill="#6366f1"/>
+
+  <!-- 外围光晕 - 极细 -->
+  <circle cx="128" cy="128" r="56"
+    stroke="#6366f1" stroke-width="1" fill="none" opacity="0.3"/>
+
+  <circle cx="128" cy="128" r="80"
+    stroke="#6366f1" stroke-width="0.5" fill="none" opacity="0.15"/>
+</svg>

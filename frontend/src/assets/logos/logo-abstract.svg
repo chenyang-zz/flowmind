@@ -1,0 +1,61 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="256" height="256" rx="56" fill="#09090b"/>
+
+  <!-- 抽象大脑形状 -->
+  <g transform="translate(128, 128)">
+    <!-- 左半球 -->
+    <path d="M-40 -20
+             C-60 -10, -70 20, -60 50
+             C-50 70, -30 80, -10 80
+             C10 80, 20 60, 20 40
+             C20 20, 10 0, -10 -10
+             C-30 -20, -50 -30, -40 -20Z"
+      fill="#6366f1" opacity="0.9"/>
+
+    <!-- 右半球 -->
+    <path d="M40 -20
+             C60 -10, 70 20, 60 50
+             C50 70, 30 80, 10 80
+             C-10 80, -20 60, -20 40
+             C-20 20, -10 0, 10 -10
+             C30 -20, 50 -30, 40 -20Z"
+      fill="#818cf8" opacity="0.7"/>
+
+    <!-- 内部波形 - 思维活动 -->
+    <g stroke="#fff" stroke-width="2" fill="none" opacity="0.5">
+      <path d="M-30 0 Q-15 -10 0 0 T30 0">
+        <animate attributeName="d"
+          values="M-30 0 Q-15 -10 0 0 T30 0;
+                  M-30 0 Q-15 10 0 0 T30 0;
+                  M-30 0 Q-15 -10 0 0 T30 0"
+          dur="2s" repeatCount="indefinite"/>
+      </path>
+      <path d="M-25 20 Q-10 10 5 20 T35 20" opacity="0.4">
+        <animate attributeName="d"
+          values="M-25 20 Q-10 10 5 20 T35 20;
+                  M-25 20 Q-10 30 5 20 T35 20;
+                  M-25 20 Q-10 10 5 20 T35 20"
+          dur="2.5s" repeatCount="indefinite"/>
+      </path>
+      <path d="M-25 -20 Q-10 -30 5 -20 T35 -20" opacity="0.3">
+        <animate attributeName="d"
+          values="M-25 -20 Q-10 -30 5 -20 T35 -20;
+                  M-25 -20 Q-10 -10 5 -20 T35 -20;
+                  M-25 -20 Q-10 -30 5 -20 T35 -20"
+          dur="1.8s" repeatCount="indefinite"/>
+      </path>
+    </g>
+  </g>
+
+  <!-- 装饰点 - 灵感火花 -->
+  <circle cx="70" cy="90" r="3" fill="#818cf8" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0.3;0.8" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="186" cy="100" r="2.5" fill="#818cf8" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.2;0.6" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="80" cy="170" r="2" fill="#818cf8" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.8;0.5" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+</svg>

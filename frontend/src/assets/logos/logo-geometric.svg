@@ -1,0 +1,15 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 几何抽象 - 三角形组合 -->
+  <rect width="256" height="256" rx="56" fill="#09090b"/>
+
+  <!-- 主三角形 -->
+  <polygon points="128,64 184,176 72,176"
+    fill="#6366f1" opacity="0.9"/>
+
+  <!-- 内部倒三角形 -->
+  <polygon points="128,104 160,156 96,156"
+    fill="#818cf8" opacity="0.6"/>
+
+  <!-- 中心点 -->
+  <circle cx="128" cy="130" r="8" fill="#fff" opacity="0.9"/>
+</svg>

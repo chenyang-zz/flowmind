@@ -1,0 +1,15 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 几何极简 - FM 字母抽象 -->
+  <rect width="256" height="256" rx="56" fill="#09090b"/>
+
+  <!-- F - 极简线条 -->
+  <g stroke="#6366f1" stroke-width="8" stroke-linecap="square">
+    <line x1="72" y1="72" x2="72" y2="184"/>
+    <line x1="72" y1="72" x2="136" y2="72"/>
+    <line x1="72" y1="128" x2="120" y2="128"/>
+  </g>
+
+  <!-- M - 极简折线 -->
+  <polyline points="152,72 152,128 184,104 216,128 216,72"
+    stroke="#818cf8" stroke-width="8" stroke-linecap="square" fill="none"/>
+</svg>
