@@ -42,6 +42,25 @@ func DefaultBatchWriterConfig() BatchWriterConfig {
 }
 
 /**
+ * BatchWriterStats 批量写入器统计信息
+ */
+type BatchWriterStats struct {
+	// TotalEvents 总事件数
+	TotalEvents int64
+
+	// PersistedEvents 成功持久化的事件数
+	PersistedEvents int64
+
+	// FailedEvents 失败的事件数
+	FailedEvents int64
+
+	// AverageLatency 平均延迟
+	AverageLatency time.Duration
+
+	mu sync.Mutex
+}
+
+/**
  * BatchWriter 批量写入器
  *
  * 缓冲事件并批量写入数据库，提升持久化性能
@@ -55,6 +74,9 @@ type BatchWriter struct {
 
 	// 批量缓冲区
 	buffer []events.Event
+
+	// 统计信息
+	stats *BatchWriterStats
 
 	// 并发控制
 	mu     sync.Mutex
@@ -83,6 +105,7 @@ func NewBatchWriter(repo EventRepository, config BatchWriterConfig) *BatchWriter
 		config:    config,
 		eventChan: make(chan events.Event, config.EventBuffer),
 		buffer:    make([]events.Event, 0, config.BatchSize),
+		stats:     &BatchWriterStats{},
 		ctx:       ctx,
 		cancel:    cancel,
 		started:   false,
@@ -313,4 +336,13 @@ func (bw *BatchWriter) IsStarted() bool {
 	bw.mu.Lock()
 	defer bw.mu.Unlock()
 	return bw.started
+}
+
+/**
+ * GetStats 获取统计信息
+ *
+ * Returns: *BatchWriterStats - 统计信息
+ */
+func (bw *BatchWriter) GetStats() *BatchWriterStats {
+	return bw.stats
 }
