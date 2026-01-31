@@ -13,6 +13,7 @@ import (
 
 	"github.com/chenyang-zz/flowmind/internal/domain/models"
 	"github.com/chenyang-zz/flowmind/internal/infrastructure/ai"
+	"github.com/chenyang-zz/flowmind/internal/infrastructure/cache"
 	"github.com/chenyang-zz/flowmind/internal/infrastructure/logger"
 	"go.uber.org/zap"
 )
@@ -53,7 +54,7 @@ func DefaultAIPatternFilterConfig() AIPatternFilterConfig {
 type AIPatternFilter struct {
 	config  AIPatternFilterConfig
 	aiModel ai.AIModel
-	// TODO: 添加缓存支持（BBolt 或内存缓存）
+	cache   cache.Cache // AI 分析结果缓存
 }
 
 /**
@@ -77,9 +78,22 @@ func NewAIPatternFilter(config AIPatternFilterConfig) (*AIPatternFilter, error) 
 		config.CacheTTL = 24 * time.Hour
 	}
 
+	// 创建缓存实例
+	var cacheInstance cache.Cache
+	if config.CacheEnabled {
+		// 使用内存缓存，默认24小时TTL
+		cacheInstance = cache.NewMemoryCache(
+			1000,  // 最多1000个缓存项
+			10*time.Minute,  // 每10分钟清理一次
+		)
+		logger.Info("AI 分析缓存已启用",
+			zap.Duration("ttl", config.CacheTTL))
+	}
+
 	return &AIPatternFilter{
 		config:  config,
 		aiModel: config.AIModel,
+		cache:   cacheInstance,
 	}, nil
 }
 
@@ -98,7 +112,17 @@ func (f *AIPatternFilter) ShouldAutomate(ctx context.Context, pattern *models.Pa
 		return pattern.AIAnalysis, nil
 	}
 
-	// TODO: 检查缓存
+	// 检查缓存
+	if f.cache != nil {
+		cacheKey := f.buildCacheKey(pattern)
+		if cached, found := f.cache.Get(cacheKey); found {
+			if analysis, ok := cached.(*models.AIAnalysis); ok {
+				logger.Info("从缓存获取 AI 分析结果",
+					zap.String("pattern_id", pattern.ID))
+				return analysis, nil
+			}
+		}
+	}
 
 	logger.Info("开始 AI 分析模式",
 		zap.String("pattern_id", pattern.ID),
@@ -158,7 +182,19 @@ func (f *AIPatternFilter) ShouldAutomate(ctx context.Context, pattern *models.Pa
 		zap.String("reason", aiAnalysis.Reason),
 		zap.String("complexity", aiAnalysis.Complexity))
 
-	// TODO: 保存到缓存
+	// 保存到缓存
+	if f.cache != nil {
+		cacheKey := f.buildCacheKey(pattern)
+		if err := f.cache.Set(cacheKey, aiAnalysis, f.config.CacheTTL); err != nil {
+			logger.Warn("缓存设置失败",
+				zap.String("pattern_id", pattern.ID),
+				zap.Error(err))
+		} else {
+			logger.Debug("AI 分析结果已缓存",
+				zap.String("pattern_id", pattern.ID),
+				zap.Duration("ttl", f.config.CacheTTL))
+		}
+	}
 
 	return aiAnalysis, nil
 }
@@ -314,4 +350,43 @@ func (f *AIPatternFilter) GetAnalysisSummary(analysis *models.AIAnalysis) string
 	summary += fmt.Sprintf("分析时间: %s\n", analysis.AnalyzedAt.Format("2006-01-02 15:04:05"))
 
 	return summary
+}
+
+/**
+ * buildCacheKey 构建缓存键
+ *
+ * 使用模式序列的字符串表示和支持度作为缓存键，
+ * 确保相同的模式序列能够命中缓存
+ *
+ * Parameters:
+ *   - pattern: 模式对象
+ *
+ * Returns: string - 缓存键
+ */
+func (f *AIPatternFilter) buildCacheKey(pattern *models.Pattern) string {
+	// 将模式序列转换为字符串表示
+	var sequenceStr string
+	for _, step := range pattern.Sequence {
+		sequenceStr += string(step.Type) + ":" + step.Action + ":"
+		if step.Context != nil && step.Context.Application != "" {
+			sequenceStr += step.Context.Application
+		}
+		sequenceStr += "|"
+	}
+
+	// 使用模式序列和支持度生成缓存键
+	return fmt.Sprintf("pattern_analysis:%s:%d", sequenceStr, pattern.SupportCount)
+}
+
+/**
+ * Close 关闭过滤器并释放资源
+ *
+ * 停止缓存等资源
+ */
+func (f *AIPatternFilter) Close() error {
+	if f.cache != nil {
+		f.cache.Stop()
+		logger.Info("AI 模式过滤器已关闭")
+	}
+	return nil
 }
